@@ -19,3 +19,13 @@ header .original-logo .original-wordmark img,.footer-brand .original-logo .origi
  header .original-logo .original-emblem img{width:94px;left:-22px}
  header .original-logo .original-wordmark img{width:144px;left:-3px;top:-56px}
 }
+
+/* Crop only the original emblem and wordmark, excluding the source tagline. */
+header .original-logo .original-emblem,.footer-brand .original-logo .original-emblem{height:38px;width:73px}
+header .original-logo .original-emblem img,.footer-brand .original-logo .original-emblem img{width:94px;left:-21px}
+header .original-logo .original-wordmark,.footer-brand .original-logo .original-wordmark{height:28px}
+@media(max-width:560px){
+ header .original-logo .original-emblem{height:35px;width:65px}
+ header .original-logo .original-emblem img{width:88px;left:-20px}
+ header .original-logo .original-wordmark{height:27px}
+}
