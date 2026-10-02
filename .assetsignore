@@ -1,0 +1,8 @@
+.git/
+.github/
+functions/
+worker.js
+wrangler.jsonc
+goat-knowledge.js
+README*
+LAUNCH-CHECKLIST.txt

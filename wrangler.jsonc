@@ -1,0 +1,12 @@
+{
+  "name": "detcord-digital",
+  "main": "worker.js",
+  "compatibility_date": "2026-10-02",
+  "assets": {
+    "directory": ".",
+    "binding": "ASSETS",
+    "run_worker_first": [
+      "/api/*"
+    ]
+  }
+}
