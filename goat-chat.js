@@ -1,5 +1,5 @@
 (() => {
-  const style = document.createElement('link'); style.rel = 'stylesheet'; style.href = '/goat-chat.css?v=goat-avatar-1'; document.head.append(style);
+  const style = document.createElement('link'); style.rel = 'stylesheet'; style.href = '/goat-chat.css?v=mobile-2'; document.head.append(style);
   const root = document.createElement('div'); root.id = 'goat-chat';
   root.innerHTML = `<button class="goat-launch" aria-expanded="false" aria-controls="goat-panel"><img class="goat-launch-avatar" src="/goat-chat-avatar.jpg" alt=""> <span>Chat with The GOAT</span></button><section id="goat-panel" class="goat-panel" role="dialog" aria-label="Chat with The GOAT" hidden><div class="goat-head"><div class="goat-identity"><img class="goat-avatar" src="/goat-chat-avatar.jpg" alt="The Digital GOAT"><div><strong>The GOAT</strong><small>Mad Scientist of Marketing · AI</small></div></div><button class="goat-close" aria-label="Close chat">×</button></div><div class="goat-messages" role="log" aria-live="polite" aria-relevant="additions"></div><div class="goat-options"><button>More leads</button><button>A better website</button><button>Review my website</button><button>Marketing advice</button></div><form class="goat-form"><label for="goat-question" class="goat-sr">Your message</label><input id="goat-question" maxlength="1200" placeholder="Ask the GOAT…" autocomplete="off" required><button type="submit">Send</button></form><div class="goat-foot"><a href="/contact.html">Talk to a person</a><span>AI can make mistakes. <a href="/privacy.html">Privacy</a></span></div></section>`;
   document.body.append(root);
@@ -7,7 +7,29 @@
   let history = [], busy = false;
   function message(text, who) { const el = document.createElement('div'); el.className = `goat-message goat-${who}`; el.textContent = text; log.append(el); log.scrollTop = log.scrollHeight; return el; }
   message('Welcome to the lab. I’m the GOAT. What are we dissecting today—your ads, your website, or your next growth experiment?','assistant');
-  function toggle(open) { panel.hidden = !open; launch.setAttribute('aria-expanded', String(open)); if (open) input.focus(); else launch.focus(); }
+  const mobile = () => window.matchMedia('(max-width: 600px)').matches;
+  let savedOverflow = '';
+  function viewport() {
+    const v = window.visualViewport;
+    root.style.setProperty('--goat-height', (v ? v.height : window.innerHeight) + 'px');
+    root.style.setProperty('--goat-top', (v ? v.offsetTop : 0) + 'px');
+    root.classList.toggle('goat-compact', mobile() && (v ? v.height : window.innerHeight) < 480);
+  }
+  window.visualViewport?.addEventListener('resize', viewport);
+  window.visualViewport?.addEventListener('scroll', viewport);
+  window.addEventListener('resize', viewport);
+  viewport();
+  function toggle(open) {
+    panel.hidden = !open; launch.setAttribute('aria-expanded', String(open));
+    root.classList.toggle('goat-open', open);
+    if (open) {
+      if (mobile()) { savedOverflow = document.body.style.overflow; document.body.style.overflow = 'hidden'; }
+      else input.focus();
+      viewport();
+    } else {
+      input.blur(); document.body.style.overflow = savedOverflow; launch.focus();
+    }
+  }
   launch.onclick = () => toggle(panel.hidden); root.querySelector('.goat-close').onclick = () => toggle(false);
   root.addEventListener('keydown', e => { if (e.key === 'Escape') toggle(false); });
   async function ask(text) {
@@ -30,7 +52,7 @@
       }
       history = [...messages, {role:'assistant',content:data.reply.slice(0,1200)}];
     } catch (error) { pending.textContent = error.name === 'TimeoutError' ? 'That took too long. Please try again or use our contact form.' : (error.message || 'Please try again or use our contact form.'); }
-    finally { busy = false; send.disabled = false; input.disabled = false; log.scrollTop = log.scrollHeight; if (!panel.hidden) input.focus(); }
+    finally { busy = false; send.disabled = false; input.disabled = false; log.scrollTop = log.scrollHeight; if (!panel.hidden && !mobile()) input.focus(); }
   }
   form.onsubmit = e => {e.preventDefault(); ask(input.value.trim());};
   root.querySelectorAll('.goat-options button').forEach(button => { button.onclick = () => ask(button.textContent); });
