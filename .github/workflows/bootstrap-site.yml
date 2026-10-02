@@ -1,0 +1,32 @@
+name: Bootstrap Detcord site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/bootstrap-site.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  unpack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unpack production site
+        run: |
+          unzip -o detcord-digital-website-v7-goat-sitewide.zip -d .
+          rm -f detcord-digital-website-v7-goat-sitewide.zip
+      - name: Commit site files
+        run: |
+          git config user.name "detcord-deploy-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes"
+          else
+            git commit -m "Bootstrap Detcord Digital production site"
+            git push
+          fi
