@@ -51,3 +51,35 @@ form{display:grid;gap:12px}input,textarea,select{width:100%;background:#0b0f14;c
 .goat-note{border-left:3px solid var(--orange);padding:3px 0 3px 16px;margin:26px 0;color:#cbd1d8;font-style:italic}
 .lab-label{font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:#ff8a35;font-weight:900}
 @media(max-width:800px){.goat-visual-split{grid-template-columns:1fr}.goat-strip{padding:22px}}
+
+
+/* v8 mobile-first polish */
+header .wrap{max-width:1240px}
+nav{height:78px}
+.brand{font-size:18px;white-space:nowrap}
+.hero{padding-top:72px}
+.logo-stage img{aspect-ratio:3/2;object-fit:cover;box-shadow:0 28px 80px #0008}
+.card{transition:transform .2s ease,border-color .2s ease,background .2s ease}
+.card:hover{background:linear-gradient(180deg,#151b22,#0b0e12)}
+.btn{min-height:48px}
+.goat-strip a{display:inline-block;margin-top:8px;color:var(--orange2);font-weight:850}
+@media(max-width:860px){
+ nav{height:68px}.brand{font-size:16px}.links{gap:10px}.links .cta{padding:11px 14px;font-size:13px}
+ .hero{padding:24px 0 52px}.hero-grid{gap:28px}.logo-stage{max-width:none;width:100%}
+ .logo-stage img{border-radius:14px}.hero h1{margin-top:12px}
+ section{padding:58px 0}.section-head{margin-bottom:24px}
+ .split{gap:28px}.metric{font-size:52px}
+}
+@media(max-width:560px){
+ .wrap{padding:0 16px}.brand{letter-spacing:.065em;font-size:15px}
+ .links .cta{font-size:0;padding:10px 13px}.links .cta:after{content:"IGNITE";font-size:12px;letter-spacing:.04em}
+ .hero{padding-top:18px}.hero-grid{gap:22px}.logo-stage{margin-inline:0}
+ .logo-stage img{aspect-ratio:1.05/1;object-fit:cover}
+ .hero h1{font-size:clamp(43px,13vw,58px);line-height:.94}
+ .lead{font-size:17px}.actions{display:grid;grid-template-columns:1fr}.actions .btn{width:100%}
+ .stats{margin-top:24px}.stat{padding:16px}.stat strong{font-size:19px}
+ section{padding:50px 0}.section-head h2{font-size:38px}
+ .card{min-height:0;padding:22px}.band .split h2{font-size:38px!important}
+ .goat-strip{margin:18px 0}.goat-strip h2{font-size:31px;line-height:1.05}
+ .footer-row{display:grid;gap:14px}
+}
