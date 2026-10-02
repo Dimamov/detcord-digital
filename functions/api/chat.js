@@ -1,4 +1,14 @@
 import { knowledge } from '../../goat-knowledge.js';
+function goatSpeak(text) {
+  // Keep links, email addresses, code and quoted text intact.
+  return text.split(/(https?:\/\/[^\s]+|www\.[^\s]+|[\w.+-]+@[\w.-]+\.[a-z]{2,}|\x60[^\x60]*\x60|"[^"]*"|“[^”]*”)/gi).map((part, index) => {
+    if (index % 2) return part;
+    return part.replace(/\b(basically|basics?|bad|back|balance|balanced|balancing|baseline)\b/gi, word => {
+      const prefix = word === word.toUpperCase() ? 'BAAA-' : /^[A-Z]/.test(word) ? 'Baaa-' : 'baaa-';
+      return prefix + word.slice(2);
+    });
+  }).join('');
+}
 const json = (body, status = 200) => Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
 export async function onRequestPost({ request, env }) {
   const url = new URL(request.url);
@@ -42,7 +52,7 @@ export async function onRequestPost({ request, env }) {
     const reply = (data.output || []).flatMap(item => item.content || []).filter(item => item.type === 'output_text').map(item => item.text).join('\n');
     if (!reply) return json({ error: 'Please try again or use our contact form.' }, 502);
     const sources = (data.output || []).flatMap(item => item.content || []).flatMap(item => item.annotations || []).filter(a => a.type === 'url_citation').map(a => ({ url: a.url, title: a.title || a.url }));
-    return json({ reply, sources });
+    return json({ reply: goatSpeak(reply), sources });
   } catch { return json({ error: 'The GOAT hit a snag. Try again or use our contact form.' }, 503); }
 }
 export function onRequestGet() { return json({ service: 'Detcord GOAT', status: 'ready' }); }
