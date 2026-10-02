@@ -83,3 +83,28 @@ nav{height:78px}
  .goat-strip{margin:18px 0}.goat-strip h2{font-size:31px;line-height:1.05}
  .footer-row{display:grid;gap:14px}
 }
+
+
+/* v9 Detcord identity system */
+.det-hero{position:relative;background:
+ radial-gradient(circle at 78% 24%,rgba(255,106,0,.16),transparent 28%),
+ linear-gradient(180deg,#080a0d 0%,#07090c 100%)}
+.det-hero:before{content:"";position:absolute;inset:0;opacity:.18;pointer-events:none;background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);background-size:44px 44px;mask-image:linear-gradient(to bottom,#000,transparent 88%)}
+.hero-spark{position:absolute;width:420px;height:2px;right:-70px;top:28%;transform:rotate(-28deg);background:linear-gradient(90deg,transparent,var(--orange),#fff,transparent);box-shadow:0 0 18px var(--orange);opacity:.7}
+.hero-copy{position:relative;z-index:2}
+.hero-copy .kicker:before{content:"";display:inline-block;width:28px;height:2px;background:var(--orange);vertical-align:middle;margin-right:10px}
+.logo-stage{padding:10px;border:1px solid #ffffff12;border-radius:22px;background:linear-gradient(145deg,#ffffff08,#ffffff02);box-shadow:inset 0 1px #ffffff0d}
+.logo-stage .signal{font:800 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.18em;color:#8d98a5;padding:8px 8px 12px}
+.live-chip{position:absolute;right:22px;bottom:22px;z-index:3;background:#080b0fdd;border:1px solid #ffffff1c;border-radius:999px;padding:8px 11px;font:800 10px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.12em;color:#d8dee5;backdrop-filter:blur(10px)}
+.live-chip i{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--orange);margin-right:7px;box-shadow:0 0 12px var(--orange)}
+.capabilities-grid .card{position:relative;overflow:hidden}
+.capabilities-grid .card:after{content:"";position:absolute;width:90px;height:90px;right:-45px;bottom:-45px;border:1px solid #ff6a0025;border-radius:50%}
+.capabilities-grid .card h3{max-width:90%}
+.capabilities-grid .card a{transition:color .2s ease}.capabilities-grid .card a:hover{color:var(--orange2)}
+@media(max-width:560px){
+ .hero-spark{width:220px;right:-80px;top:17%;opacity:.45}
+ .logo-stage{padding:7px;border-radius:16px}.logo-stage .signal{padding:6px 6px 9px;font-size:8px}
+ .live-chip{right:14px;bottom:14px;font-size:8px;padding:7px 9px}
+ .det-hero .hero-grid{display:flex;flex-direction:column}.det-hero .hero-copy{order:1}.det-hero .logo-stage{order:0}
+ .det-hero .stats{margin-top:22px}
+}
