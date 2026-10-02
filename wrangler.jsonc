@@ -8,5 +8,21 @@
     "run_worker_first": [
       "/api/*"
     ]
-  }
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "GOAT_ARCHIVE",
+        "class_name": "GoatArchive"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "goat-transcripts-v1",
+      "new_sqlite_classes": [
+        "GoatArchive"
+      ]
+    }
+  ]
 }
