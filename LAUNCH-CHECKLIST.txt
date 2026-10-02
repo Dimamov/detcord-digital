@@ -1,0 +1,32 @@
+DETCORD DIGITAL — LAUNCH CHECKLIST
+Completed:
+- Dedicated service pages
+- Dedicated industry pages
+- Editorial/Insights hub
+- Canonical tags
+- XML sitemap + robots.txt
+- Organization/Service/Article schema where applicable
+- Mobile responsive layouts
+- Internal linking
+- Contact/lead CTA architecture
+- No fabricated reviews, case studies, ROI numbers, awards or locations
+
+Before public launch:
+1. CONTACT DESTINATION: info@detcorddigital.com.
+   Contact form now posts to a server-side form relay instead of mailto.
+   IMPORTANT: submit the first live test form and approve the relay's one-time activation email sent to info@detcorddigital.com before launch.
+2. Public contact email confirmed: info@detcorddigital.com.
+3. Add phone number if one will be public.
+4. Add real business mailing/physical address only if you want it public.
+5. Add LocalBusiness schema only if there is a genuine public business location.
+6. Create/verify Google Business Profile if eligible.
+7. Connect Search Console and submit /sitemap.xml.
+8. Connect GA4 and ad conversion tracking with appropriate consent/privacy controls.
+9. Run Rich Results Test and URL Inspection after deployment.
+10. Add real case studies/results as they become available.
+11. Add original staff/office/work images where useful for visual/multimodal search.
+12. Replace the temporary contact-form alert with real server-side submission.
+
+BRAND PASS:
+- Digital GOAT brand integration added across Home, Services, Insights, Contact, selected service pages and industry pages.
+- Full mascot artwork intentionally concentrated on Home/About; secondary pages use restrained lab/GOAT editorial cues to avoid overwhelming the brand.
