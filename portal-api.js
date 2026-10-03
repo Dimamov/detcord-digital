@@ -28,7 +28,7 @@ export class ClientPortal{
  let client;
  if(email==='admin'){
  const secret=this.env.PORTAL_ADMIN_KEY||this.env.GOAT_REVIEW_KEY;
- if(!secret||secret.length<20)return json({error:'Administrator access needs to be configured before client accounts can be created.'},503);
+ if(!secret||secret.length<12)return json({error:'Administrator access needs to be configured before client accounts can be created.'},503);
  if(await hash(p)===await hash(secret))client='admin';
  }else{const row=this.rows('SELECT * FROM clients WHERE email=?',email)[0];if(row&&await password(p,row.salt)===row.password)client=row.id;}
  if(!client)return json({error:'Sign-in details not accepted.'},401);
