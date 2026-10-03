@@ -1,0 +1,97 @@
+const json=(data,status=200,headers={})=>Response.json(data,{status,headers:{'Cache-Control':'no-store','X-Robots-Tag':'noindex, nofollow',...headers}});
+const hash=async s=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s)))).map(v=>v.toString(16).padStart(2,'0')).join('');
+const password=async(p,s)=>{const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(p),'PBKDF2',false,['deriveBits']);return Array.from(new Uint8Array(await crypto.subtle.deriveBits({name:'PBKDF2',salt:new TextEncoder().encode(s),iterations:100000,hash:'SHA-256'},key,256))).map(v=>v.toString(16).padStart(2,'0')).join('');};
+const safeLink=value=>{try{const u=new URL(value);return u.protocol==='https:'&&!u.username&&!u.password&&['buy.stripe.com','checkout.stripe.com','invoice.stripe.com','invoicing.stripe.com','www.paypal.com','paypal.com','square.link','checkout.square.site'].includes(u.hostname)?u.href:null;}catch{return null;}};
+export async function portalAPI(request,env){
+ if(!env.CLIENT_PORTAL)return json({error:'Client portal storage is not connected yet.'},503);
+ if(!['GET','HEAD'].includes(request.method)&&request.headers.get('Origin')!==new URL(request.url).origin)return json({error:'Request origin rejected.'},403);
+ return env.CLIENT_PORTAL.get(env.CLIENT_PORTAL.idFromName('detcord-client-portal')).fetch(request);
+}
+export class ClientPortal{
+ constructor(ctx,env){this.ctx=ctx;this.env=env;this.sql=ctx.storage.sql;
+ this.sql.exec('CREATE TABLE IF NOT EXISTS clients(id TEXT PRIMARY KEY,email TEXT UNIQUE,name TEXT,salt TEXT,password TEXT)');
+ this.sql.exec('CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY,client TEXT,expires INTEGER)');
+ this.sql.exec('CREATE TABLE IF NOT EXISTS attempts(id TEXT PRIMARY KEY,count INTEGER,expires INTEGER)');
+ this.sql.exec('CREATE TABLE IF NOT EXISTS items(id TEXT PRIMARY KEY,client TEXT,kind TEXT,title TEXT,created INTEGER,data TEXT)');
+ this.sql.exec('CREATE TABLE IF NOT EXISTS chunks(id TEXT,seq INTEGER,body BLOB,PRIMARY KEY(id,seq))');
+ }
+ rows(q,...p){return this.sql.exec(q,...p).toArray();}
+ async fetch(req){try{return await this.handle(req);}catch(e){console.error('Portal request failed');return json({error:'Unable to complete this request. Please try again.'},500);}}
+ async handle(req){
+ const url=new URL(req.url),route=url.pathname.replace('/api/portal',''),now=Date.now();
+ this.sql.exec('DELETE FROM sessions WHERE expires<?',now);this.sql.exec('DELETE FROM attempts WHERE expires<?',now);
+ if(route==='/login'&&req.method==='POST'){
+ const ip=req.headers.get('CF-Connecting-IP')||'unknown';const attemptId=await hash(ip);
+ const count=this.rows('SELECT count FROM attempts WHERE id=?',attemptId)[0]?.count||0;if(count>=10)return json({error:'Too many sign-in attempts. Try again in 15 minutes.'},429);
+ this.sql.exec('INSERT INTO attempts VALUES(?,1,?) ON CONFLICT(id) DO UPDATE SET count=count+1',attemptId,now+900000);
+ const d=await req.json();const email=String(d.email||'').trim().toLowerCase(),p=String(d.password||'');if(p.length>256)return json({error:'Sign-in details not accepted.'},401);
+ let client;
+ if(email==='admin'){
+ const secret=this.env.PORTAL_ADMIN_KEY||this.env.GOAT_REVIEW_KEY;
+ if(!secret||secret.length<20)return json({error:'Administrator access needs to be configured before client accounts can be created.'},503);
+ if(await hash(p)===await hash(secret))client='admin';
+ }else{const row=this.rows('SELECT * FROM clients WHERE email=?',email)[0];if(row&&await password(p,row.salt)===row.password)client=row.id;}
+ if(!client)return json({error:'Sign-in details not accepted.'},401);
+ this.sql.exec('DELETE FROM attempts WHERE id=?',attemptId);const token=crypto.randomUUID()+crypto.randomUUID();this.sql.exec('INSERT INTO sessions VALUES(?,?,?)',await hash(token),client,now+28800000);
+ return json({ok:true},200,{'Set-Cookie':'detcord_portal='+token+'; Path=/api/portal; Secure; HttpOnly; SameSite=Strict; Max-Age=28800'});
+ }
+ const token=(req.headers.get('Cookie')||'').match(/(?:^|;\s*)detcord_portal=([^;]+)/)?.[1];const session=token&&this.rows('SELECT client FROM sessions WHERE token=?',await hash(token))[0];
+ if(!session)return json({error:'Please sign in.'},401);
+ if(route==='/logout'&&req.method==='POST'){this.sql.exec('DELETE FROM sessions WHERE token=?',await hash(token));return json({ok:true},200,{'Set-Cookie':'detcord_portal=; Path=/api/portal; Secure; HttpOnly; SameSite=Strict; Max-Age=0'});}
+ const admin=session.client==='admin';
+ if(route==='/me')return json({admin,client:admin?{name:'Detcord admin'}:this.rows('SELECT id,email,name FROM clients WHERE id=?',session.client)[0]});
+ if(route==='/clients'){
+ if(!admin)return json({error:'Access denied.'},403);
+ if(req.method==='GET')return json({clients:this.rows('SELECT id,email,name FROM clients ORDER BY name')});
+ if(req.method==='POST'){
+ const d=await req.json(),email=String(d.email||'').trim().toLowerCase(),p=String(d.password||'');
+ if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||!d.name||p.length<12||p.length>256)return json({error:'Enter a name, valid email and password of at least 12 characters.'},400);
+ if(this.rows('SELECT id FROM clients WHERE email=?',email).length)return json({error:'That client email already exists.'},409);
+ const salt=crypto.randomUUID(),id=crypto.randomUUID();this.sql.exec('INSERT INTO clients VALUES(?,?,?,?,?)',id,email,String(d.name).slice(0,150),salt,await password(p,salt));return json({id},201);
+ }
+ }
+ if(route==='/password'&&req.method==='POST'){
+ const d=await req.json(),id=admin?d.client:session.client,p=String(d.password||'');if(p.length<12||p.length>256)return json({error:'Use at least 12 characters.'},400);
+ const row=this.rows('SELECT * FROM clients WHERE id=?',id)[0];if(!row)return json({error:'Client not found.'},404);
+ if(!admin&&await password(String(d.current||''),row.salt)!==row.password)return json({error:'Current password is incorrect.'},401);
+ const salt=crypto.randomUUID();this.sql.exec('UPDATE clients SET salt=?,password=? WHERE id=?',salt,await password(p,salt),id);this.sql.exec('DELETE FROM sessions WHERE client=?',id);return json({ok:true});
+ }
+ const client=admin?url.searchParams.get('client'):session.client;
+ if(!client||!this.rows('SELECT id FROM clients WHERE id=?',client).length)return json({error:'Select a client.'},400);
+ if(route==='/items'&&req.method==='GET')return json({items:this.rows('SELECT * FROM items WHERE client=? ORDER BY created DESC',client).map(r=>({...r,data:JSON.parse(r.data)}))});
+ if(route==='/invoice'&&req.method==='POST'){
+ if(!admin)return json({error:'Access denied.'},403);const d=await req.json();const pay=d.payment?safeLink(d.payment):null;
+ if(!d.title||!Number.isSafeInteger(d.amount)||d.amount<=0||!/^\d{4}-\d{2}-\d{2}$/.test(d.due)||!['unpaid','paid'].includes(d.status)||d.payment&&!pay)return json({error:'Check invoice fields. Use a Stripe, PayPal or Square HTTPS payment link.'},400);
+ const id=crypto.randomUUID();this.sql.exec('INSERT INTO items VALUES(?,?,?,?,?,?)',id,client,'invoice',String(d.title).slice(0,200),now,JSON.stringify({amount:d.amount,due:d.due,status:d.status,payment:pay}));return json({id},201);
+ }
+ const invoiceMatch=route.match(/^\/invoice\/([0-9a-f-]{36})$/);
+ if(invoiceMatch&&req.method==='PATCH'){
+ if(!admin)return json({error:'Access denied.'},403);
+ const item=this.rows("SELECT * FROM items WHERE id=? AND client=? AND kind='invoice'",invoiceMatch[1],client)[0];if(!item)return json({error:'Invoice not found.'},404);
+ const d=await req.json();if(!['paid','unpaid'].includes(d.status))return json({error:'Invalid status.'},400);
+ const data=JSON.parse(item.data);data.status=d.status;this.sql.exec('UPDATE items SET data=? WHERE id=?',JSON.stringify(data),item.id);return json({ok:true});
+ }
+ if(route==='/upload'&&req.method==='POST'){
+ const length=Number(req.headers.get('Content-Length'));if(length>5500000)return json({error:'Maximum file size is 5 MB.'},413);
+ const form=await req.formData(),file=form.get('file'),kind=form.get('kind');
+ if(!file||typeof file.arrayBuffer!=='function'||file.size>5000000||!file.size)return json({error:'Choose a file up to 5 MB.'},400);
+ if(kind!=='photo'&&!(admin&&kind==='report'))return json({error:'Access denied.'},403);
+ const bytes=new Uint8Array(await file.arrayBuffer());const jpeg=bytes[0]===255&&bytes[1]===216&&bytes[2]===255,png=bytes[0]===137&&bytes[1]===80&&bytes[2]===78&&bytes[3]===71,webp=new TextDecoder().decode(bytes.slice(0,4))==='RIFF'&&new TextDecoder().decode(bytes.slice(8,12))==='WEBP',pdf=new TextDecoder().decode(bytes.slice(0,5))==='%PDF-';
+ const type=jpeg?'image/jpeg':png?'image/png':webp?'image/webp':pdf&&kind==='report'?'application/pdf':null;
+ if(!type)return json({error:kind==='report'?'Use a PDF, JPG, PNG or WebP file.':'Use a JPG, PNG or WebP photo.'},400);
+ const quota=this.rows("SELECT COALESCE(SUM(json_extract(data,'$.size')),0) AS n FROM items WHERE client=?",client)[0].n;if(quota+file.size>100000000)return json({error:'This account has reached its 100 MB upload limit. Contact Detcord.'},413);
+ const id=crypto.randomUUID(),title=String(form.get('title')||file.name).slice(0,200);this.ctx.storage.transactionSync(()=>{this.sql.exec('INSERT INTO items VALUES(?,?,?,?,?,?)',id,client,kind,title,now,JSON.stringify({type,size:file.size,name:file.name.slice(0,200)}));for(let i=0;i<bytes.length;i+=64000)this.sql.exec('INSERT INTO chunks VALUES(?,?,?)',id,i/64000,bytes.slice(i,i+64000));});return json({id},201);
+ }
+ const match=route.match(/^\/file\/([0-9a-f-]{36})$/);
+ if(match&&req.method==='GET'){
+ const item=this.rows('SELECT * FROM items WHERE id=? AND client=?',match[1],client)[0];if(!item||item.kind==='invoice')return json({error:'File not found.'},404);
+ const data=JSON.parse(item.data),bytes=new Uint8Array(data.size);let offset=0;for(const c of this.rows('SELECT body FROM chunks WHERE id=? ORDER BY seq',item.id)){const chunk=new Uint8Array(c.body);bytes.set(chunk,offset);offset+=chunk.length;}
+ return new Response(bytes,{headers:{'Content-Type':data.type,'Content-Disposition':'attachment; filename="'+data.name.replace(/[^a-zA-Z0-9._ -]/g,'_')+'"','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Robots-Tag':'noindex'}});
+ }
+ if(route.startsWith('/items/')&&req.method==='DELETE'){
+ const id=route.split('/')[2],item=this.rows('SELECT * FROM items WHERE id=? AND client=?',id,client)[0];if(!item)return json({error:'Not found.'},404);if(!admin&&item.kind!=='photo')return json({error:'Access denied.'},403);
+ this.ctx.storage.transactionSync(()=>{this.sql.exec('DELETE FROM chunks WHERE id=?',id);this.sql.exec('DELETE FROM items WHERE id=?',id);});return json({ok:true});
+ }
+ return json({error:'Not found.'},404);
+ }
+}
