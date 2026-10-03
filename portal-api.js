@@ -18,6 +18,7 @@ export class ClientPortal{
  this.sql.exec('CREATE TABLE IF NOT EXISTS staff(id TEXT PRIMARY KEY,email TEXT UNIQUE,name TEXT,salt TEXT,password TEXT)');
  this.sql.exec('CREATE TABLE IF NOT EXISTS assignments(staff TEXT,client TEXT,PRIMARY KEY(staff,client))');
  this.sql.exec('CREATE TABLE IF NOT EXISTS admin_assignments(client TEXT PRIMARY KEY)');
+ this.sql.exec('CREATE TABLE IF NOT EXISTS client_integrations(client TEXT,provider TEXT,account_id TEXT,label TEXT,status TEXT,updated INTEGER,data TEXT,PRIMARY KEY(client,provider,account_id))');
  this.sql.exec('CREATE TABLE IF NOT EXISTS clients(id TEXT PRIMARY KEY,email TEXT UNIQUE,name TEXT,salt TEXT,password TEXT)');
  this.sql.exec('CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY,client TEXT,expires INTEGER)');
  this.sql.exec('CREATE TABLE IF NOT EXISTS attempts(id TEXT PRIMARY KEY,count INTEGER,expires INTEGER)');
@@ -100,6 +101,14 @@ export class ClientPortal{
  if(route==='/access-request'&&req.method==='POST'){if(!admin)return json({error:'Access denied.'},403);return createAccessRequest(this,req,url,client,now);}
  const accessMatch=route.match(/^\/access-request\/([0-9a-f-]{36})\/(send|complete)$/);
  if(accessMatch&&req.method==='POST'){if(!admin)return json({error:'Access denied.'},403);return accessRequestActions(this,req,url,client,accessMatch[1],accessMatch[2],now);}
+ if(route==='/integrations'&&req.method==='GET'){
+ if(!admin)return json({error:'Access denied.'},403);return json({integrations:this.rows('SELECT provider,account_id,label,status,updated FROM client_integrations WHERE client=? ORDER BY provider,label',client)});
+ }
+ if(route==='/integrations'&&req.method==='POST'){
+ if(!admin)return json({error:'Access denied.'},403);const d=await req.json(),provider=String(d.provider||'');if(!['ga4','google-ads','search-console'].includes(provider))return json({error:'Unsupported data source.'},400);
+ const accountId=String(d.accountId||'').trim().slice(0,300),label=String(d.label||'').trim().slice(0,200);if(!accountId)return json({error:'Choose an account or property.'},400);
+ this.sql.exec('INSERT INTO client_integrations VALUES(?,?,?,?,?,?,?) ON CONFLICT(client,provider,account_id) DO UPDATE SET label=excluded.label,status=excluded.status,updated=excluded.updated,data=excluded.data',client,provider,accountId,label,'connected',now,JSON.stringify({connectedBy:owner?'Dmitriy Movsesyan':repId}));return json({ok:true});
+ }
  if(route==='/report-draft'&&req.method==='POST'){
  if(!admin)return json({error:'Access denied.'},403);const d=await req.json(),title=String(d.title||'').trim().slice(0,200),raw=String(d.data||'').trim().slice(0,60000),instructions=String(d.instructions||'').trim().slice(0,10000);
  if(!title||!raw)return json({error:'Add a report title and data.'},400);
