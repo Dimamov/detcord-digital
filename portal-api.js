@@ -1,4 +1,4 @@
-import { sendRepInvitation } from './portal-invitations.js';
+import { sendRepInvitation, sendAccountInvitation } from './portal-invitations.js';
 import { accessIntake, createAccessRequest, accessRequestActions } from './portal-access-api.js';
 import { SERVICES, renderContract, signingProblems, SIGNING_STATEMENT } from './contract-template.js';
 const json=(data,status=200,headers={})=>Response.json(data,{status,headers:{'Cache-Control':'no-store','X-Robots-Tag':'noindex, nofollow',...headers}});
@@ -14,6 +14,7 @@ export class ClientPortal{
  constructor(ctx,env){this.ctx=ctx;this.env=env;this.sql=ctx.storage.sql;
  this.sql.exec('CREATE TABLE IF NOT EXISTS archived_accounts(id TEXT PRIMARY KEY,kind TEXT,at INTEGER)');
  this.sql.exec('CREATE TABLE IF NOT EXISTS staff_invites(id TEXT PRIMARY KEY,at INTEGER,status TEXT,error TEXT)');
+ this.sql.exec('CREATE TABLE IF NOT EXISTS account_setup(id TEXT PRIMARY KEY,kind TEXT,token_hash TEXT,expires INTEGER,created INTEGER)');
  this.sql.exec('CREATE TABLE IF NOT EXISTS staff(id TEXT PRIMARY KEY,email TEXT UNIQUE,name TEXT,salt TEXT,password TEXT)');
  this.sql.exec('CREATE TABLE IF NOT EXISTS assignments(staff TEXT,client TEXT,PRIMARY KEY(staff,client))');
  this.sql.exec('CREATE TABLE IF NOT EXISTS clients(id TEXT PRIMARY KEY,email TEXT UNIQUE,name TEXT,salt TEXT,password TEXT)');
@@ -28,6 +29,7 @@ export class ClientPortal{
  const url=new URL(req.url),route=url.pathname.replace('/api/portal',''),now=Date.now();
  this.sql.exec('DELETE FROM sessions WHERE expires<?',now);this.sql.exec('DELETE FROM attempts WHERE expires<?',now);
  if(route==='/access-intake')return accessIntake(this,req,url,now);
+ if(route==='/activate'&&req.method==='POST'){const d=await req.json(),id=String(d.id||''),token=String(d.token||''),p=String(d.password||'');if(p.length<12||p.length>256)return json({error:'Use a password of at least 12 characters.'},400);const setup=this.rows('SELECT * FROM account_setup WHERE id=?',id)[0];if(!setup||setup.expires<now||await hash(token)!==setup.token_hash)return json({error:'This setup link is invalid or expired. Ask Detcord for a new invitation.'},400);const table=setup.kind==='staff'?'staff':'clients',salt=crypto.randomUUID();this.sql.exec('UPDATE '+table+' SET salt=?,password=? WHERE id=?',salt,await password(p,salt),id);this.sql.exec('DELETE FROM account_setup WHERE id=?',id);return json({ok:true});}
  if(route==='/setup'&&req.method==='GET'){
  const key=this.env.PORTAL_ADMIN_KEY;
  return json({adminKeyPresent:!!key,minimumLengthMet:!!key&&key.length>=12,extraEdgeSpaces:!!key&&key!==key.trim(),minimumLength:12});
@@ -55,13 +57,13 @@ export class ClientPortal{
  if(route==='/me')return json({admin,role:owner?'admin':rep?'sales':'client',client:owner?{name:'Detcord admin'}:rep?this.rows('SELECT id,email,name FROM staff WHERE id=?',repId)[0]:this.rows('SELECT id,email,name FROM clients WHERE id=?',session.client)[0]});
 
  const accountDelete=route.match(/^\/(clients|staff)\/([0-9a-f-]{36})$/);
- if(accountDelete&&req.method==='DELETE'){if(!owner)return json({error:'Only an administrator can delete accounts.'},403);const table=accountDelete[1],id=accountDelete[2];if(!this.rows('SELECT id FROM '+table+' WHERE id=?',id).length)return json({error:'Account not found.'},404);this.ctx.storage.transactionSync(()=>{this.sql.exec('INSERT OR REPLACE INTO archived_accounts VALUES(?,?,?)',id,table,now);this.sql.exec('DELETE FROM sessions WHERE client=?',table==='staff'?'staff:'+id:id);this.sql.exec('DELETE FROM assignments WHERE '+(table==='staff'?'staff':'client')+'=?',id);});return json({ok:true});}
+ if(accountDelete&&req.method==='DELETE'){if(!owner)return json({error:'Only an administrator can delete accounts.'},403);const table=accountDelete[1],id=accountDelete[2],row=this.rows('SELECT id,email FROM '+table+' WHERE id=?',id)[0];if(!row)return json({error:'Account not found.'},404);this.ctx.storage.transactionSync(()=>{this.sql.exec('DELETE FROM sessions WHERE client=?',table==='staff'?'staff:'+id:id);this.sql.exec('DELETE FROM assignments WHERE '+(table==='staff'?'staff':'client')+'=?',id);this.sql.exec('DELETE FROM account_setup WHERE id=?',id);if(table==='staff'){this.sql.exec('DELETE FROM staff_invites WHERE id=?',id);}else{this.sql.exec("UPDATE items SET data=replace(data,?,'[deleted]') WHERE client=?",row.email,id);}this.sql.exec('DELETE FROM '+table+' WHERE id=?',id);this.sql.exec('DELETE FROM archived_accounts WHERE id=?',id);});return json({ok:true});}
  const inviteMatch=route.match(/^\/staff\/([0-9a-f-]{36})\/invite$/);
  if(inviteMatch&&req.method==='POST'){if(!owner)return json({error:'Only an administrator can send rep invitations.'},403);const invitation=await sendRepInvitation(this,inviteMatch[1],url.origin);return json({invitation,error:invitation.error},invitation.accepted?200:400);}
  if(route==='/staff'){
  if(!owner)return json({error:'Access denied.'},403);
  if(req.method==='GET')return json({staff:this.rows('SELECT id,email,name FROM staff WHERE id NOT IN (SELECT id FROM archived_accounts) ORDER BY name').map(r=>({...r,invitation:this.rows('SELECT at,status,error FROM staff_invites WHERE id=?',r.id)[0]||null,clients:this.rows('SELECT client FROM assignments WHERE staff=?',r.id).map(a=>a.client)}))});
- if(req.method==='POST'){const d=await req.json(),email=String(d.email||'').trim().toLowerCase(),p=String(d.password||'');if(!d.name||! /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||p.length<12||p.length>256)return json({error:'Enter a name, valid email and password of at least 12 characters.'},400);if(this.rows('SELECT id FROM clients WHERE email=?',email).length||this.rows('SELECT id FROM staff WHERE email=?',email).length)return json({error:'This email already has an account.'},409);const id=crypto.randomUUID(),salt=crypto.randomUUID();this.sql.exec('INSERT INTO staff VALUES(?,?,?,?,?)',id,email,String(d.name).slice(0,150),salt,await password(p,salt));const invitation=await sendRepInvitation(this,id,url.origin);return json({id,invitation},201);}
+ if(req.method==='POST'){const d=await req.json(),email=String(d.email||'').trim().toLowerCase();if(!d.name||! /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return json({error:'Enter a name and valid email.'},400);if(this.rows('SELECT id FROM clients WHERE email=?',email).length||this.rows('SELECT id FROM staff WHERE email=?',email).length)return json({error:'This email already has an account.'},409);const id=crypto.randomUUID();this.sql.exec('INSERT INTO staff VALUES(?,?,?,?,?)',id,email,String(d.name).slice(0,150),'','');const invitation=await sendRepInvitation(this,id,url.origin);return json({id,invitation},201);}
  }
  if(route==='/assignment'&&req.method==='POST'){
  if(!owner)return json({error:'Access denied.'},403);const d=await req.json();if(!this.rows('SELECT id FROM staff WHERE id=?',d.staff).length||!this.rows('SELECT id FROM clients WHERE id=?',d.client).length)return json({error:'Select a rep and a client.'},400);if(d.assigned===true)this.sql.exec('INSERT OR IGNORE INTO assignments VALUES(?,?)',d.staff,d.client);else this.sql.exec('DELETE FROM assignments WHERE staff=? AND client=?',d.staff,d.client);return json({ok:true});
@@ -72,10 +74,10 @@ export class ClientPortal{
  if(req.method==='GET')return json({clients:owner?this.rows('SELECT id,email,name FROM clients WHERE id NOT IN (SELECT id FROM archived_accounts) ORDER BY name'):this.rows('SELECT c.id,c.email,c.name FROM clients c JOIN assignments a ON a.client=c.id WHERE a.staff=? ORDER BY c.name',repId)});
  if(req.method==='POST'){
 
- const d=await req.json(),email=String(d.email||'').trim().toLowerCase(),p=String(d.password||'');
- if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||!d.name||p.length<12||p.length>256)return json({error:'Enter a name, valid email and password of at least 12 characters.'},400);
+ const d=await req.json(),email=String(d.email||'').trim().toLowerCase();
+ if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||!d.name)return json({error:'Enter a name and valid email.'},400);
  if(this.rows('SELECT id FROM clients WHERE email=?',email).length||this.rows('SELECT id FROM staff WHERE email=?',email).length)return json({error:'That client email already exists.'},409);
- const salt=crypto.randomUUID(),id=crypto.randomUUID();this.sql.exec('INSERT INTO clients VALUES(?,?,?,?,?)',id,email,String(d.name).slice(0,150),salt,await password(p,salt));if(rep)this.sql.exec('INSERT INTO assignments VALUES(?,?)',repId,id);return json({id},201);
+ const id=crypto.randomUUID();this.sql.exec('INSERT INTO clients VALUES(?,?,?,?,?)',id,email,String(d.name).slice(0,150),'','');if(rep)this.sql.exec('INSERT INTO assignments VALUES(?,?)',repId,id);const invitation=await sendAccountInvitation(this,'client',id,url.origin);return json({id,invitation},201);
  }
  }
  if(route==='/password'&&req.method==='POST'){
