@@ -10,6 +10,8 @@ export async function portalAPI(request,env){
 }
 export class ClientPortal{
  constructor(ctx,env){this.ctx=ctx;this.env=env;this.sql=ctx.storage.sql;
+ this.sql.exec('CREATE TABLE IF NOT EXISTS staff(id TEXT PRIMARY KEY,email TEXT UNIQUE,name TEXT,salt TEXT,password TEXT)');
+ this.sql.exec('CREATE TABLE IF NOT EXISTS assignments(staff TEXT,client TEXT,PRIMARY KEY(staff,client))');
  this.sql.exec('CREATE TABLE IF NOT EXISTS clients(id TEXT PRIMARY KEY,email TEXT UNIQUE,name TEXT,salt TEXT,password TEXT)');
  this.sql.exec('CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY,client TEXT,expires INTEGER)');
  this.sql.exec('CREATE TABLE IF NOT EXISTS attempts(id TEXT PRIMARY KEY,count INTEGER,expires INTEGER)');
@@ -35,7 +37,7 @@ export class ClientPortal{
  const secret=this.env.PORTAL_ADMIN_KEY||this.env.GOAT_REVIEW_KEY;
  if(!secret||secret.length<12)return json({error:'Administrator access needs to be configured before client accounts can be created.'},503);
  if(await hash(p)===await hash(secret))client='admin';
- }else{const row=this.rows('SELECT * FROM clients WHERE email=?',email)[0];if(row&&await password(p,row.salt)===row.password)client=row.id;}
+ }else{const rep=this.rows('SELECT * FROM staff WHERE email=?',email)[0],row=rep||this.rows('SELECT * FROM clients WHERE email=?',email)[0];if(row&&await password(p,row.salt)===row.password)client=rep?'staff:'+row.id:row.id;}
  if(!client)return json({error:email==='admin'?'The password does not match the deployed administrator key. Check PORTAL_ADMIN_KEY in Cloudflare.':'Sign-in details not accepted.'},401);
  this.sql.exec('DELETE FROM attempts WHERE id=?',attemptId);const token=crypto.randomUUID()+crypto.randomUUID();this.sql.exec('INSERT INTO sessions VALUES(?,?,?)',await hash(token),client,now+28800000);
  return json({ok:true},200,{'Set-Cookie':'detcord_portal='+token+'; Path=/api/portal; Secure; HttpOnly; SameSite=Strict; Max-Age=28800'});
@@ -43,25 +45,37 @@ export class ClientPortal{
  const token=(req.headers.get('Cookie')||'').match(/(?:^|;\s*)detcord_portal=([^;]+)/)?.[1];const session=token&&this.rows('SELECT client FROM sessions WHERE token=?',await hash(token))[0];
  if(!session)return json({error:'Please sign in.'},401);
  if(route==='/logout'&&req.method==='POST'){this.sql.exec('DELETE FROM sessions WHERE token=?',await hash(token));return json({ok:true},200,{'Set-Cookie':'detcord_portal=; Path=/api/portal; Secure; HttpOnly; SameSite=Strict; Max-Age=0'});}
- const admin=session.client==='admin';
- if(route==='/me')return json({admin,client:admin?{name:'Detcord admin'}:this.rows('SELECT id,email,name FROM clients WHERE id=?',session.client)[0]});
+ const owner=session.client==='admin',rep=session.client.startsWith('staff:'),repId=rep?session.client.slice(6):null,admin=owner||rep;
+ if(route==='/me')return json({admin,role:owner?'admin':rep?'sales':'client',client:owner?{name:'Detcord admin'}:rep?this.rows('SELECT id,email,name FROM staff WHERE id=?',repId)[0]:this.rows('SELECT id,email,name FROM clients WHERE id=?',session.client)[0]});
+
+ if(route==='/staff'){
+ if(!owner)return json({error:'Access denied.'},403);
+ if(req.method==='GET')return json({staff:this.rows('SELECT id,email,name FROM staff ORDER BY name').map(r=>({...r,clients:this.rows('SELECT client FROM assignments WHERE staff=?',r.id).map(a=>a.client)}))});
+ if(req.method==='POST'){const d=await req.json(),email=String(d.email||'').trim().toLowerCase(),p=String(d.password||'');if(!d.name||! /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||p.length<12||p.length>256)return json({error:'Enter a name, valid email and password of at least 12 characters.'},400);if(this.rows('SELECT id FROM clients WHERE email=?',email).length||this.rows('SELECT id FROM staff WHERE email=?',email).length)return json({error:'This email already has an account.'},409);const id=crypto.randomUUID(),salt=crypto.randomUUID();this.sql.exec('INSERT INTO staff VALUES(?,?,?,?,?)',id,email,String(d.name).slice(0,150),salt,await password(p,salt));return json({id},201);}
+ }
+ if(route==='/assignment'&&req.method==='POST'){
+ if(!owner)return json({error:'Access denied.'},403);const d=await req.json();if(!this.rows('SELECT id FROM staff WHERE id=?',d.staff).length||!this.rows('SELECT id FROM clients WHERE id=?',d.client).length)return json({error:'Select a rep and a client.'},400);if(d.assigned===true)this.sql.exec('INSERT OR IGNORE INTO assignments VALUES(?,?)',d.staff,d.client);else this.sql.exec('DELETE FROM assignments WHERE staff=? AND client=?',d.staff,d.client);return json({ok:true});
+ }
+
  if(route==='/clients'){
  if(!admin)return json({error:'Access denied.'},403);
- if(req.method==='GET')return json({clients:this.rows('SELECT id,email,name FROM clients ORDER BY name')});
+ if(req.method==='GET')return json({clients:owner?this.rows('SELECT id,email,name FROM clients ORDER BY name'):this.rows('SELECT c.id,c.email,c.name FROM clients c JOIN assignments a ON a.client=c.id WHERE a.staff=? ORDER BY c.name',repId)});
  if(req.method==='POST'){
+ if(!owner)return json({error:'Only an administrator can create clients.'},403);
  const d=await req.json(),email=String(d.email||'').trim().toLowerCase(),p=String(d.password||'');
  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||!d.name||p.length<12||p.length>256)return json({error:'Enter a name, valid email and password of at least 12 characters.'},400);
- if(this.rows('SELECT id FROM clients WHERE email=?',email).length)return json({error:'That client email already exists.'},409);
+ if(this.rows('SELECT id FROM clients WHERE email=?',email).length||this.rows('SELECT id FROM staff WHERE email=?',email).length)return json({error:'That client email already exists.'},409);
  const salt=crypto.randomUUID(),id=crypto.randomUUID();this.sql.exec('INSERT INTO clients VALUES(?,?,?,?,?)',id,email,String(d.name).slice(0,150),salt,await password(p,salt));return json({id},201);
  }
  }
  if(route==='/password'&&req.method==='POST'){
- const d=await req.json(),id=admin?d.client:session.client,p=String(d.password||'');if(p.length<12||p.length>256)return json({error:'Use at least 12 characters.'},400);
- const row=this.rows('SELECT * FROM clients WHERE id=?',id)[0];if(!row)return json({error:'Client not found.'},404);
- if(!admin&&await password(String(d.current||''),row.salt)!==row.password)return json({error:'Current password is incorrect.'},401);
- const salt=crypto.randomUUID();this.sql.exec('UPDATE clients SET salt=?,password=? WHERE id=?',salt,await password(p,salt),id);this.sql.exec('DELETE FROM sessions WHERE client=?',id);return json({ok:true});
+ const d=await req.json(),id=owner?d.client:rep?repId:session.client,p=String(d.password||'');if(p.length<12||p.length>256)return json({error:'Use at least 12 characters.'},400);
+ const table=rep?'staff':'clients';const row=this.rows('SELECT * FROM '+table+' WHERE id=?',id)[0];if(!row)return json({error:'Client not found.'},404);
+ if(!owner&&await password(String(d.current||''),row.salt)!==row.password)return json({error:'Current password is incorrect.'},401);
+ const salt=crypto.randomUUID();this.sql.exec('UPDATE '+table+' SET salt=?,password=? WHERE id=?',salt,await password(p,salt),id);this.sql.exec('DELETE FROM sessions WHERE client=?',rep?'staff:'+id:id);return json({ok:true});
  }
  const client=admin?url.searchParams.get('client'):session.client;
+ if(rep&&!this.rows('SELECT client FROM assignments WHERE staff=? AND client=?',repId,client).length)return json({error:'This client is not assigned to your account.'},403);
  if(!client||!this.rows('SELECT id FROM clients WHERE id=?',client).length)return json({error:'Select a client.'},400);
  if(route==='/items'&&req.method==='GET')return json({items:this.rows('SELECT * FROM items WHERE client=? ORDER BY created DESC',client).map(r=>({...r,data:JSON.parse(r.data)}))});
  if(route==='/catalog'&&req.method==='GET')return json({services:SERVICES});
