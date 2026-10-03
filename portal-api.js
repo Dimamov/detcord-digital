@@ -20,6 +20,10 @@ export class ClientPortal{
  async handle(req){
  const url=new URL(req.url),route=url.pathname.replace('/api/portal',''),now=Date.now();
  this.sql.exec('DELETE FROM sessions WHERE expires<?',now);this.sql.exec('DELETE FROM attempts WHERE expires<?',now);
+ if(route==='/setup'&&req.method==='GET'){
+ const key=this.env.PORTAL_ADMIN_KEY;
+ return json({adminKeyPresent:!!key,minimumLengthMet:!!key&&key.length>=12,extraEdgeSpaces:!!key&&key!==key.trim(),minimumLength:12});
+ }
  if(route==='/login'&&req.method==='POST'){
  const ip=req.headers.get('CF-Connecting-IP')||'unknown';const attemptId=await hash(ip);
  const count=this.rows('SELECT count FROM attempts WHERE id=?',attemptId)[0]?.count||0;if(count>=10)return json({error:'Too many sign-in attempts. Try again in 15 minutes.'},429);
@@ -31,7 +35,7 @@ export class ClientPortal{
  if(!secret||secret.length<12)return json({error:'Administrator access needs to be configured before client accounts can be created.'},503);
  if(await hash(p)===await hash(secret))client='admin';
  }else{const row=this.rows('SELECT * FROM clients WHERE email=?',email)[0];if(row&&await password(p,row.salt)===row.password)client=row.id;}
- if(!client)return json({error:'Sign-in details not accepted.'},401);
+ if(!client)return json({error:email==='admin'?'The password does not match the deployed administrator key. Check PORTAL_ADMIN_KEY in Cloudflare.':'Sign-in details not accepted.'},401);
  this.sql.exec('DELETE FROM attempts WHERE id=?',attemptId);const token=crypto.randomUUID()+crypto.randomUUID();this.sql.exec('INSERT INTO sessions VALUES(?,?,?)',await hash(token),client,now+28800000);
  return json({ok:true},200,{'Set-Cookie':'detcord_portal='+token+'; Path=/api/portal; Secure; HttpOnly; SameSite=Strict; Max-Age=28800'});
  }
