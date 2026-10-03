@@ -6,7 +6,7 @@ export async function sendAccountInvitation(portal,kind,id,origin){
  if(!portal.env.RESEND_API_KEY)return {accepted:false,error:'Email is not configured. Add RESEND_API_KEY as a Production runtime secret in Cloudflare.'};
  const now=Date.now(),token=crypto.randomUUID()+crypto.randomUUID();
  portal.sql.exec('INSERT OR REPLACE INTO account_setup VALUES(?,?,?,?,?)',id,kind,await sha(token),now+86400000,now);
- const link=new URL('/client-portal.html',origin);link.searchParams.set('setup',id);link.hash=token;
+ const link=new URL('/client-portal',origin);link.searchParams.set('setup',id);link.hash=token;
  const label=kind==='staff'?'sales rep':'client';
  const payload=brandedEmail({from:portal.env.PORTAL_EMAIL_FROM||portal.env.GOAT_EMAIL_FROM||'Detcord Digital <info@detcorddigital.com>',to:[account.email],reply_to:'info@detcorddigital.com',subject:'Set up your Detcord Digital portal password',text:'Hello '+account.name+',\n\nYour Detcord Digital '+label+' portal account is ready.\n\nCreate your own password here:\n'+link.href+'\n\nThis secure setup link expires in 24 hours and can only be used once.\n\nIf you did not expect this invitation, you can ignore this email.\n\nDetcord Digital\ninfo@detcorddigital.com'});
  try{
