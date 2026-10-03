@@ -28,7 +28,7 @@
 /local-seo.html /local-seo 301
 /marketing-automation.html /marketing-automation 301
 /mobile-app-development.html /mobile-app-development 301
-/multi-location-marketing-industries.html /multi-location-marketing-industries 301
+/multi-location-marketing-industries.html /multi-location-marketing 301
 /multi-location-marketing.html /multi-location-marketing 301
 /paid-social.html /paid-social 301
 /privacy.html /privacy 301
@@ -41,3 +41,5 @@
 /social-media.html /social-media 301
 /thanks.html /thanks 301
 /web-design.html /web-design 301
+
+/multi-location-marketing-industries /multi-location-marketing 301
