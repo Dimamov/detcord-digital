@@ -33,3 +33,36 @@ header a[aria-current=page]:not(.cta){color:#fff;text-decoration:underline;text-
 .lab-result strong{font-size:clamp(44px,7vw,88px);overflow-wrap:anywhere}.table-scroll{overflow-x:auto}.table-scroll table{min-width:560px}.table-scroll th,.table-scroll td{padding:14px;text-align:left;border-bottom:1px solid #304454}.table-scroll th{color:#edf4fa}.article li{margin-bottom:10px}
 
 .illustrated-card>h2{padding:0 22px;font-size:22px;line-height:1.2;letter-spacing:-.025em;margin:22px 0 12px}.illustrated-card>h2 a{color:inherit}
+
+/* Custom solutions and illustrative deliverables */
+#custom-growth-solutions .capability-grid,#business-growth-services .capability-grid,#working-with-detcord .capability-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+#custom-growth-solutions .card .num,#business-growth-services .card .num{position:static;display:block;font-size:.875rem;line-height:1.5;letter-spacing:.06em;margin-bottom:18px;color:#83baff}
+#custom-growth-solutions .card,#business-growth-services .card,#working-with-detcord .card,#lead-workflow-example .card{gap:10px;min-height:0;padding:30px}
+#lead-workflow-example .card .num{position:static;font-size:.875rem;margin-bottom:12px}
+#business-growth-services .card ul{padding-left:20px;line-height:1.7;margin:0 0 16px}
+#custom-growth-solutions .goat-strip,#business-growth-services .goat-strip,#working-with-detcord .goat-strip,#lead-workflow-example .goat-strip{margin-top:32px}
+.detcord-examples{border-block:1px solid #263c50;background:#0b1420}
+.detcord-examples h2{font-size:clamp(2rem,4.5vw,3.5rem);line-height:1.1;margin:18px 0 24px}
+.example-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px;margin-top:36px}
+.example-card{padding:24px;background:#101e2c;border:1px solid #2b455d;border-radius:14px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.example-label{font-size:.875rem;color:#8ec9ff;letter-spacing:.04em}
+.example-card h3{font-size:1.375rem;line-height:1.25;margin:0}
+.example-card p{font-size:1rem;line-height:1.65;margin:0;color:#bacbd9}
+.example-card>a{margin-top:auto;font-size:1rem;color:#8ec9ff}
+.sample-brand,.sample-report,.sample-flow{background:#07101a;border:1px solid #2b455d;border-radius:8px;padding:22px;min-height:270px;box-sizing:border-box;margin:0}
+.sample-brand{display:flex;flex-direction:column;justify-content:center;gap:16px}
+.sample-brand>strong{font-size:clamp(1.5rem,2.4vw,2rem);letter-spacing:.06em;color:#fff}
+.sample-brand>span{font-size:.875rem;line-height:1.5;color:#95b5ce}
+.brand-swatches{display:flex;gap:8px;flex-wrap:wrap}
+.swatch{padding:12px;font-size:.875rem;border-radius:4px;border:1px solid #526779}
+.swatch-blue{background:#14314e;color:#fff}.swatch-orange{background:#ff8a2e;color:#181008}.swatch-white{background:#edf4fa;color:#101e2c}
+.sample-flow{list-style-position:inside;display:flex;flex-direction:column;gap:14px;font-size:1rem;color:#edf4fa}
+.sample-flow small{display:block;font-size:.875rem;line-height:1.5;color:#a6bed0;margin-top:5px}
+.sample-report{display:flex;flex-direction:column;gap:18px}
+.sample-report>div{padding-bottom:10px;border-bottom:1px solid #263c50}
+.sample-report strong,.sample-report span{display:block;font-size:1rem;line-height:1.4}
+.sample-report span{font-size:.875rem;color:#a6bed0;margin-top:4px}
+.example-consult{display:flex;justify-content:space-between;gap:30px;align-items:center;margin-top:40px;padding:30px 0 0}
+.example-consult h3{font-size:1.5rem;margin:0 0 12px}.example-consult p{font-size:1rem;line-height:1.65}
+@media(max-width:900px){.example-grid{grid-template-columns:1fr}.sample-brand,.sample-report,.sample-flow{min-height:0}.example-consult{align-items:flex-start;flex-direction:column}}
+@media(max-width:640px){#custom-growth-solutions .capability-grid,#business-growth-services .capability-grid,#working-with-detcord .capability-grid{grid-template-columns:1fr}.example-card,#custom-growth-solutions .card,#business-growth-services .card,#working-with-detcord .card,#lead-workflow-example .card{padding:22px}}
