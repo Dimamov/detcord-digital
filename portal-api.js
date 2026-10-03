@@ -54,6 +54,7 @@ export class ClientPortal{
  if(!session)return json({error:'Please sign in.'},401);
  if(route==='/logout'&&req.method==='POST'){this.sql.exec('DELETE FROM sessions WHERE token=?',await hash(token));return json({ok:true},200,{'Set-Cookie':'detcord_portal=; Path=/api/portal; Secure; HttpOnly; SameSite=Strict; Max-Age=0'});}
  const owner=session.client==='admin',rep=session.client.startsWith('staff:'),repId=rep?session.client.slice(6):null,admin=owner||rep;
+ if(owner){for(const a of this.rows('SELECT id,kind FROM archived_accounts')){const table=a.kind==='staff'?'staff':'clients';this.sql.exec('DELETE FROM sessions WHERE client=?',table==='staff'?'staff:'+a.id:a.id);this.sql.exec('DELETE FROM assignments WHERE '+(table==='staff'?'staff':'client')+'=?',a.id);this.sql.exec('DELETE FROM account_setup WHERE id=?',a.id);if(table==='staff')this.sql.exec('DELETE FROM staff_invites WHERE id=?',a.id);this.sql.exec('DELETE FROM '+table+' WHERE id=?',a.id);}this.sql.exec('DELETE FROM archived_accounts');}
  if(route==='/me')return json({admin,role:owner?'admin':rep?'sales':'client',client:owner?{name:'Detcord admin'}:rep?this.rows('SELECT id,email,name FROM staff WHERE id=?',repId)[0]:this.rows('SELECT id,email,name FROM clients WHERE id=?',session.client)[0]});
 
  const accountDelete=route.match(/^\/(clients|staff)\/([0-9a-f-]{36})$/);
