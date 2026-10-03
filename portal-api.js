@@ -17,6 +17,7 @@ export class ClientPortal{
  this.sql.exec('CREATE TABLE IF NOT EXISTS account_setup(id TEXT PRIMARY KEY,kind TEXT,token_hash TEXT,expires INTEGER,created INTEGER)');
  this.sql.exec('CREATE TABLE IF NOT EXISTS staff(id TEXT PRIMARY KEY,email TEXT UNIQUE,name TEXT,salt TEXT,password TEXT)');
  this.sql.exec('CREATE TABLE IF NOT EXISTS assignments(staff TEXT,client TEXT,PRIMARY KEY(staff,client))');
+ this.sql.exec('CREATE TABLE IF NOT EXISTS admin_assignments(client TEXT PRIMARY KEY)');
  this.sql.exec('CREATE TABLE IF NOT EXISTS clients(id TEXT PRIMARY KEY,email TEXT UNIQUE,name TEXT,salt TEXT,password TEXT)');
  this.sql.exec('CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY,client TEXT,expires INTEGER)');
  this.sql.exec('CREATE TABLE IF NOT EXISTS attempts(id TEXT PRIMARY KEY,count INTEGER,expires INTEGER)');
@@ -66,6 +67,11 @@ export class ClientPortal{
  if(req.method==='GET')return json({staff:this.rows('SELECT id,email,name FROM staff WHERE id NOT IN (SELECT id FROM archived_accounts) ORDER BY name').map(r=>({...r,invitation:this.rows('SELECT at,status,error FROM staff_invites WHERE id=?',r.id)[0]||null,clients:this.rows('SELECT client FROM assignments WHERE staff=?',r.id).map(a=>a.client)}))});
  if(req.method==='POST'){const d=await req.json(),email=String(d.email||'').trim().toLowerCase();if(!d.name||! /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return json({error:'Enter a name and valid email.'},400);if(this.rows('SELECT id FROM clients WHERE email=?',email).length||this.rows('SELECT id FROM staff WHERE email=?',email).length)return json({error:'This email already has an account.'},409);const id=crypto.randomUUID();this.sql.exec('INSERT INTO staff VALUES(?,?,?,?,?)',id,email,String(d.name).slice(0,150),'','');const invitation=await sendRepInvitation(this,id,url.origin);return json({id,invitation},201);}
  }
+ if(route==='/admin-assignment'&&req.method==='POST'){
+ if(!owner)return json({error:'Access denied.'},403);const d=await req.json();if(!this.rows('SELECT id FROM clients WHERE id=?',d.client).length)return json({error:'Select a client.'},400);
+ if(d.assigned===true)this.sql.exec('INSERT OR IGNORE INTO admin_assignments VALUES(?)',d.client);else this.sql.exec('DELETE FROM admin_assignments WHERE client=?',d.client);return json({ok:true});
+ }
+ if(route==='/admin-assignments'&&req.method==='GET'){if(!owner)return json({error:'Access denied.'},403);return json({name:'Dmitriy Movsesyan',clients:this.rows('SELECT client FROM admin_assignments').map(r=>r.client)});}
  if(route==='/assignment'&&req.method==='POST'){
  if(!owner)return json({error:'Access denied.'},403);const d=await req.json();if(!this.rows('SELECT id FROM staff WHERE id=?',d.staff).length||!this.rows('SELECT id FROM clients WHERE id=?',d.client).length)return json({error:'Select a rep and a client.'},400);if(d.assigned===true)this.sql.exec('INSERT OR IGNORE INTO assignments VALUES(?,?)',d.staff,d.client);else this.sql.exec('DELETE FROM assignments WHERE staff=? AND client=?',d.staff,d.client);return json({ok:true});
  }
@@ -94,6 +100,11 @@ export class ClientPortal{
  if(route==='/access-request'&&req.method==='POST'){if(!admin)return json({error:'Access denied.'},403);return createAccessRequest(this,req,url,client,now);}
  const accessMatch=route.match(/^\/access-request\/([0-9a-f-]{36})\/(send|complete)$/);
  if(accessMatch&&req.method==='POST'){if(!admin)return json({error:'Access denied.'},403);return accessRequestActions(this,req,url,client,accessMatch[1],accessMatch[2],now);}
+ if(route==='/report-draft'&&req.method==='POST'){
+ if(!admin)return json({error:'Access denied.'},403);const d=await req.json(),title=String(d.title||'').trim().slice(0,200),raw=String(d.data||'').trim().slice(0,60000),instructions=String(d.instructions||'').trim().slice(0,10000);
+ if(!title||!raw)return json({error:'Add a report title and data.'},400);
+ const id=crypto.randomUUID();this.sql.exec('INSERT INTO items VALUES(?,?,?,?,?,?)',id,client,'report-draft',title,now,JSON.stringify({title,raw,instructions,author:owner?'Dmitriy Movsesyan':this.rows('SELECT name FROM staff WHERE id=?',repId)[0]?.name||'Detcord',status:'draft'}));return json({id},201);
+ }
  if(route==='/items'&&req.method==='GET')return json({items:this.rows('SELECT * FROM items WHERE client=? ORDER BY created DESC',client).map(r=>({...r,data:JSON.parse(r.data)}))});
  if(route==='/catalog'&&req.method==='GET')return json({services:SERVICES});
  if(route==='/contract'&&req.method==='POST'){
