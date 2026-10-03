@@ -15,3 +15,17 @@
 .goal-result a:not(.btn){color:#a7d5ff;font-size:14px;padding:6px 0}
 @media(max-width:700px){.goal-buttons{display:grid;grid-template-columns:1fr 1fr;gap:8px}.goal-buttons button{padding:12px 10px;font-size:13px}.goal-result{grid-template-columns:1fr;gap:24px;padding:22px}.goal-result h3{font-size:27px}.goal-result .btn{font-size:13px;gap:10px}}
 @media(max-width:360px){.ignite-copy .actions{flex-wrap:wrap;gap:10px 20px}.home-lab .final-ignite h2{font-size:52px}}
+
+/* Repeat the approved Detcord artwork above the mobile portrait. */
+.hero-brand{display:none}
+@media(max-width:700px){
+ .hero-brand{display:flex;justify-content:center;align-items:center;padding:18px 0 10px;min-height:86px}
+ .hero-brand-lockup{display:flex;align-items:center;gap:10px;width:232px;height:54px;transform:scale(1.25)}
+ .hero-brand-lockup>span{display:block;position:relative;overflow:hidden;flex:none;mix-blend-mode:screen}
+ .hero-brand-lockup .original-emblem{width:73px;height:38px}
+ .hero-brand-lockup .original-wordmark{width:149px;height:28px}
+ .hero-brand-lockup img{position:absolute;height:auto;max-width:none}
+ .hero-brand-lockup .original-emblem img{width:94px;left:-21px;top:0}
+ .hero-brand-lockup .original-wordmark img{width:156px;left:-3px;top:-61px}
+}
+@media(max-width:360px){.hero-brand-lockup{transform:scale(1.1)}}

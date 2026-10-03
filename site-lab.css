@@ -34,3 +34,21 @@ header .original-logo .original-wordmark,.footer-brand .original-logo .original-
 header a[aria-current=page]:not(.cta){color:#fff;text-decoration:underline;text-decoration-color:#ff984d;text-underline-offset:7px}
 @media(max-width:560px){header>.wrap{padding-inline:16px}header nav{gap:12px;height:68px}.original-logo{max-width:calc(100vw - 88px)}.contact-lab-form .contact-pref label{min-height:40px}.contact-lab-form .consent{display:flex;align-items:flex-start;gap:10px}.contact-lab-form .consent input{margin-top:5px;flex:none;width:18px;height:18px}.contact-lab-form .contact-pref input{width:18px;height:18px}.footer-column a{padding:4px 0}}
 @media(max-width:360px){header .original-logo{width:190px;min-width:190px;gap:5px}header .original-logo .original-emblem{width:55px}header .original-logo .original-wordmark{width:130px}}
+
+/* Balance the mobile brand on the viewport, independent of the menu. */
+@media(max-width:860px){
+ header nav{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;gap:8px}
+ header .original-logo{grid-column:2;justify-self:center;width:208px;min-width:208px;gap:7px}
+ header .original-logo .original-emblem{width:65px;height:35px}
+ header .original-logo .original-emblem img{width:88px;left:-20px}
+ header .original-logo .original-wordmark{width:136px;height:27px}
+ header .original-logo .original-wordmark img{width:144px;left:-3px;top:-56px}
+ header .mobile-menu{grid-column:3;margin-left:0}
+}
+@media(max-width:380px){
+ header .original-logo{width:174px;min-width:174px;gap:6px}
+ header .original-logo .original-emblem{width:54px;height:31px}
+ header .original-logo .original-emblem img{width:77px;left:-18px}
+ header .original-logo .original-wordmark{width:114px;height:23px}
+ header .original-logo .original-wordmark img{width:120px;left:-3px;top:-47px}
+}
