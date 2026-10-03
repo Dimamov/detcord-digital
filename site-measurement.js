@@ -1,6 +1,23 @@
 (() => {
  'use strict';
- // No remote analytics is loaded. Connect a reviewed analytics destination separately.
+ // GA4 receives only approved interaction names and sanitized page information.
+ const measurementId = 'G-RLTPC4R0YS';
+ window.dataLayer = window.dataLayer || [];
+ window.gtag = window.gtag || function () { window.dataLayer.push(arguments); };
+ const cleanUrl = value => {
+  try { const url = new URL(value); return url.origin + url.pathname; } catch (_) { return ''; }
+ };
+ window.gtag('js', new Date());
+ window.gtag('config', measurementId, {
+  page_location: cleanUrl(location.href),
+  page_referrer: cleanUrl(document.referrer),
+  allow_google_signals: false,
+  allow_ad_personalization_signals: false
+ });
+ const tag = document.createElement('script');
+ tag.async = true;
+ tag.src = 'https://www.googletagmanager.com/gtag/js?id=' + measurementId;
+ document.head.appendChild(tag);
  const allowed = new Set(['cta_click','email_click','goal_select','calculator_used','form_start','form_submit_attempt','inquiry_confirmation_view','chat_open','chat_reply_received']);
  window.dataLayer = window.dataLayer || [];
  window.detcordMeasure = (event, details = {}) => {
@@ -8,8 +25,9 @@
   const payload = {event, page_path: location.pathname};
   if (/^\/[a-z0-9/_.-]*$/i.test(details.destination || '')) payload.destination = details.destination;
   if (['leads','website','search','systems'].includes(details.goal)) payload.goal = details.goal;
-  window.dataLayer.push(payload);
-  if (window.dataLayer.length > 100) window.dataLayer.splice(0, window.dataLayer.length - 100);
+  const {event: eventName, ...parameters} = payload;
+  window.gtag('event', eventName, parameters);
+
  };
  document.addEventListener('click', e => {
   const goal = e.target.closest('[data-goal]');
