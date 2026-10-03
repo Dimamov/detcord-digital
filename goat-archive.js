@@ -1,3 +1,4 @@
+import { brandedEmail } from './email-template.js';
 const DAY = 86400000;
 const IDLE = 5 * 60000;
 const RETENTION = 30 * DAY;
@@ -91,7 +92,7 @@ export class GoatArchive {
     this.sql.exec("UPDATE sessions SET email_payload=? WHERE id=?",payload,session.id);
     let sent=false,emailId=null;
     try {
-     const response=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:'Bearer '+this.env.RESEND_API_KEY,'Content-Type':'application/json','Idempotency-Key':'goat-chat/'+session.id},body:payload,signal:AbortSignal.timeout(15000)});
+     const response=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:'Bearer '+this.env.RESEND_API_KEY,'Content-Type':'application/json','Idempotency-Key':'goat-chat/'+session.id},body:JSON.stringify(brandedEmail(JSON.parse(payload))),signal:AbortSignal.timeout(15000)});
      if(response.ok){const result=await response.json();sent=!!result.id;emailId=result.id||null;}
     } catch {}
     if(sent)this.sql.exec("UPDATE sessions SET email_state='sent',email_id=?,email_payload=NULL WHERE id=?",emailId,session.id);
