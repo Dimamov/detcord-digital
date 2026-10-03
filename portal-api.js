@@ -1,3 +1,4 @@
+import { accessIntake, createAccessRequest, accessRequestActions } from './portal-access-api.js';
 import { SERVICES, renderContract, signingProblems, SIGNING_STATEMENT } from './contract-template.js';
 const json=(data,status=200,headers={})=>Response.json(data,{status,headers:{'Cache-Control':'no-store','X-Robots-Tag':'noindex, nofollow',...headers}});
 const hash=async s=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s)))).map(v=>v.toString(16).padStart(2,'0')).join('');
@@ -10,6 +11,7 @@ export async function portalAPI(request,env){
 }
 export class ClientPortal{
  constructor(ctx,env){this.ctx=ctx;this.env=env;this.sql=ctx.storage.sql;
+ this.sql.exec('CREATE TABLE IF NOT EXISTS archived_accounts(id TEXT PRIMARY KEY,kind TEXT,at INTEGER)');
  this.sql.exec('CREATE TABLE IF NOT EXISTS staff(id TEXT PRIMARY KEY,email TEXT UNIQUE,name TEXT,salt TEXT,password TEXT)');
  this.sql.exec('CREATE TABLE IF NOT EXISTS assignments(staff TEXT,client TEXT,PRIMARY KEY(staff,client))');
  this.sql.exec('CREATE TABLE IF NOT EXISTS clients(id TEXT PRIMARY KEY,email TEXT UNIQUE,name TEXT,salt TEXT,password TEXT)');
@@ -23,6 +25,7 @@ export class ClientPortal{
  async handle(req){
  const url=new URL(req.url),route=url.pathname.replace('/api/portal',''),now=Date.now();
  this.sql.exec('DELETE FROM sessions WHERE expires<?',now);this.sql.exec('DELETE FROM attempts WHERE expires<?',now);
+ if(route==='/access-intake')return accessIntake(this,req,url,now);
  if(route==='/setup'&&req.method==='GET'){
  const key=this.env.PORTAL_ADMIN_KEY;
  return json({adminKeyPresent:!!key,minimumLengthMet:!!key&&key.length>=12,extraEdgeSpaces:!!key&&key!==key.trim(),minimumLength:12});
@@ -38,6 +41,7 @@ export class ClientPortal{
  if(!secret||secret.length<12)return json({error:'Administrator access needs to be configured before client accounts can be created.'},503);
  if(await hash(p)===await hash(secret))client='admin';
  }else{const rep=this.rows('SELECT * FROM staff WHERE email=?',email)[0],row=rep||this.rows('SELECT * FROM clients WHERE email=?',email)[0];if(row&&await password(p,row.salt)===row.password)client=rep?'staff:'+row.id:row.id;}
+ if(client&&this.rows('SELECT id FROM archived_accounts WHERE id=?',client.startsWith('staff:')?client.slice(6):client).length)client=null;
  if(!client)return json({error:email==='admin'?'The password does not match the deployed administrator key. Check PORTAL_ADMIN_KEY in Cloudflare.':'Sign-in details not accepted.'},401);
  this.sql.exec('DELETE FROM attempts WHERE id=?',attemptId);const token=crypto.randomUUID()+crypto.randomUUID();this.sql.exec('INSERT INTO sessions VALUES(?,?,?)',await hash(token),client,now+28800000);
  return json({ok:true},200,{'Set-Cookie':'detcord_portal='+token+'; Path=/api/portal; Secure; HttpOnly; SameSite=Strict; Max-Age=28800'});
@@ -48,9 +52,11 @@ export class ClientPortal{
  const owner=session.client==='admin',rep=session.client.startsWith('staff:'),repId=rep?session.client.slice(6):null,admin=owner||rep;
  if(route==='/me')return json({admin,role:owner?'admin':rep?'sales':'client',client:owner?{name:'Detcord admin'}:rep?this.rows('SELECT id,email,name FROM staff WHERE id=?',repId)[0]:this.rows('SELECT id,email,name FROM clients WHERE id=?',session.client)[0]});
 
+ const accountDelete=route.match(/^\/(clients|staff)\/([0-9a-f-]{36})$/);
+ if(accountDelete&&req.method==='DELETE'){if(!owner)return json({error:'Only an administrator can delete accounts.'},403);const table=accountDelete[1],id=accountDelete[2];if(!this.rows('SELECT id FROM '+table+' WHERE id=?',id).length)return json({error:'Account not found.'},404);this.ctx.storage.transactionSync(()=>{this.sql.exec('INSERT OR REPLACE INTO archived_accounts VALUES(?,?,?)',id,table,now);this.sql.exec('DELETE FROM sessions WHERE client=?',table==='staff'?'staff:'+id:id);this.sql.exec('DELETE FROM assignments WHERE '+(table==='staff'?'staff':'client')+'=?',id);});return json({ok:true});}
  if(route==='/staff'){
  if(!owner)return json({error:'Access denied.'},403);
- if(req.method==='GET')return json({staff:this.rows('SELECT id,email,name FROM staff ORDER BY name').map(r=>({...r,clients:this.rows('SELECT client FROM assignments WHERE staff=?',r.id).map(a=>a.client)}))});
+ if(req.method==='GET')return json({staff:this.rows('SELECT id,email,name FROM staff WHERE id NOT IN (SELECT id FROM archived_accounts) ORDER BY name').map(r=>({...r,clients:this.rows('SELECT client FROM assignments WHERE staff=?',r.id).map(a=>a.client)}))});
  if(req.method==='POST'){const d=await req.json(),email=String(d.email||'').trim().toLowerCase(),p=String(d.password||'');if(!d.name||! /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||p.length<12||p.length>256)return json({error:'Enter a name, valid email and password of at least 12 characters.'},400);if(this.rows('SELECT id FROM clients WHERE email=?',email).length||this.rows('SELECT id FROM staff WHERE email=?',email).length)return json({error:'This email already has an account.'},409);const id=crypto.randomUUID(),salt=crypto.randomUUID();this.sql.exec('INSERT INTO staff VALUES(?,?,?,?,?)',id,email,String(d.name).slice(0,150),salt,await password(p,salt));return json({id},201);}
  }
  if(route==='/assignment'&&req.method==='POST'){
@@ -59,13 +65,13 @@ export class ClientPortal{
 
  if(route==='/clients'){
  if(!admin)return json({error:'Access denied.'},403);
- if(req.method==='GET')return json({clients:owner?this.rows('SELECT id,email,name FROM clients ORDER BY name'):this.rows('SELECT c.id,c.email,c.name FROM clients c JOIN assignments a ON a.client=c.id WHERE a.staff=? ORDER BY c.name',repId)});
+ if(req.method==='GET')return json({clients:owner?this.rows('SELECT id,email,name FROM clients WHERE id NOT IN (SELECT id FROM archived_accounts) ORDER BY name'):this.rows('SELECT c.id,c.email,c.name FROM clients c JOIN assignments a ON a.client=c.id WHERE a.staff=? ORDER BY c.name',repId)});
  if(req.method==='POST'){
- if(!owner)return json({error:'Only an administrator can create clients.'},403);
+
  const d=await req.json(),email=String(d.email||'').trim().toLowerCase(),p=String(d.password||'');
  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||!d.name||p.length<12||p.length>256)return json({error:'Enter a name, valid email and password of at least 12 characters.'},400);
  if(this.rows('SELECT id FROM clients WHERE email=?',email).length||this.rows('SELECT id FROM staff WHERE email=?',email).length)return json({error:'That client email already exists.'},409);
- const salt=crypto.randomUUID(),id=crypto.randomUUID();this.sql.exec('INSERT INTO clients VALUES(?,?,?,?,?)',id,email,String(d.name).slice(0,150),salt,await password(p,salt));return json({id},201);
+ const salt=crypto.randomUUID(),id=crypto.randomUUID();this.sql.exec('INSERT INTO clients VALUES(?,?,?,?,?)',id,email,String(d.name).slice(0,150),salt,await password(p,salt));if(rep)this.sql.exec('INSERT INTO assignments VALUES(?,?)',repId,id);return json({id},201);
  }
  }
  if(route==='/password'&&req.method==='POST'){
@@ -76,7 +82,11 @@ export class ClientPortal{
  }
  const client=admin?url.searchParams.get('client'):session.client;
  if(rep&&!this.rows('SELECT client FROM assignments WHERE staff=? AND client=?',repId,client).length)return json({error:'This client is not assigned to your account.'},403);
+ if(this.rows('SELECT id FROM archived_accounts WHERE id=?',client||'').length&&!owner)return json({error:'Account deleted.'},403);
  if(!client||!this.rows('SELECT id FROM clients WHERE id=?',client).length)return json({error:'Select a client.'},400);
+ if(route==='/access-request'&&req.method==='POST'){if(!admin)return json({error:'Access denied.'},403);return createAccessRequest(this,req,url,client,now);}
+ const accessMatch=route.match(/^\/access-request\/([0-9a-f-]{36})\/(send|complete)$/);
+ if(accessMatch&&req.method==='POST'){if(!admin)return json({error:'Access denied.'},403);return accessRequestActions(this,req,url,client,accessMatch[1],accessMatch[2],now);}
  if(route==='/items'&&req.method==='GET')return json({items:this.rows('SELECT * FROM items WHERE client=? ORDER BY created DESC',client).map(r=>({...r,data:JSON.parse(r.data)}))});
  if(route==='/catalog'&&req.method==='GET')return json({services:SERVICES});
  if(route==='/contract'&&req.method==='POST'){
@@ -87,7 +97,8 @@ export class ClientPortal{
  for(const k of ['setup','monthly'])if(entry[k]!==null&&(!Number.isSafeInteger(entry[k])||entry[k]<0||entry[k]>100000000))return json({error:'Enter valid prices or leave them blank.'},400);
  services.push({...service,setup:entry.setup,monthly:entry.monthly,scope:String(entry.scope||'').slice(0,5000)});}
  const customer=this.rows('SELECT id,email,name FROM clients WHERE id=?',client)[0];const id=crypto.randomUUID();
- const contract={id,title:String(d.title||'Services Agreement').slice(0,200),created:now,services,clientName:String(d.clientName||customer.name).slice(0,200),clientEmail:customer.email,logo:new URL('/detcord-logo.webp',url.origin).href,ready:false};
+ const contract={id,title:String(d.title||'Services Agreement').slice(0,200),created:now,services,clientName:String(d.clientName||customer.name).slice(0,200),clientEmail:customer.email,logo:new URL('/detcord-logo-transparent.png',url.origin).href,ready:false};
+ contract.depositCollected=d.depositCollected===true;contract.depositAmount=contract.depositCollected?d.depositAmount:0;if(contract.depositCollected&&(!Number.isSafeInteger(contract.depositAmount)||contract.depositAmount<=0||contract.depositAmount>100000000))return json({error:'Enter the deposit amount collected.'},400);contract.depositNotes=String(d.depositNotes||'').slice(0,1000);
  for(const key of ['provider','providerAddress','providerSigner','clientAddress','thirdParty','paymentTerms','monthlyStart','additional'])contract[key]=String(d[key]||'').slice(0,10000);
  contract.providerEmail=String(d.providerEmail||'info@detcorddigital.com').slice(0,200);if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contract.providerEmail))return json({error:'Enter a valid Provider notice email.'},400);
  for(const k of ['paymentDays','feedbackDays']){contract[k]=Number(d[k]|| (k==='paymentDays'?15:10));if(!Number.isInteger(contract[k])||contract[k]<1||contract[k]>90)return json({error:'Payment and feedback deadlines must be 1–90 days.'},400);}
