@@ -2,3 +2,16 @@
 @media(max-width:900px){.ignite-grid{gap:15px}.ignite-copy h1{font-size:60px}.lab-section-heading{gap:35px}.lab-pillars{gap:12px}.pillar-body{padding:20px}.pillar-body h3{font-size:21px}.revenue-grid,.lab-intro,.home-faq{gap:35px}.system-nodes{gap:3px}.system-nodes span{padding:12px 6px;font-size:7px}}
 @media(max-width:700px){.home-lab section{padding:54px 0}.ignite-grid,.lab-section-heading,.revenue-grid,.lab-intro,.home-faq{grid-template-columns:1fr;gap:28px}.home-lab .ignite-hero{padding-top:35px;padding-bottom:25px}.ignite-copy h1{font-size:clamp(49px,12.5vw,76px);line-height:1.01;margin:20px 0}.ignite-copy>p{font-size:16px}.ignite-copy .eyebrow{font-size:8px}.ignite-copy .actions{display:flex;gap:22px;align-items:center}.ignite-copy .actions .btn{width:auto}.hero-principle{margin-top:24px;max-width:100%}.goat-portrait{max-width:460px;width:100%;margin:auto;padding:0 20px 65px}.portrait-orbit{inset:0 20px 45px}.portrait-tag{bottom:0;left:12%;padding:10px 15px}.portrait-tag strong{font-size:22px}.discipline-strip .wrap{flex-wrap:wrap;justify-content:center;gap:12px;font-size:8px;padding:16px}.discipline-strip i{font-size:12px}.lab-pillars,.operating-grid{grid-template-columns:1fr;gap:18px}.pillar-art{height:180px}.pillar-body h3{font-size:26px}.pillar-body p{font-size:15px}.pillar-body{padding:22px}.all-capabilities{align-items:flex-start;flex-direction:column;gap:6px}.lab-section-heading{margin-bottom:26px}.lab-section-heading h2{margin-bottom:0}.home-lab h2{font-size:39px}.home-lab p{font-size:16px}.revenue-map{padding:20px}.home-lab .lab-intro{gap:30px}.lab-photo{max-width:500px}.operating-grid{gap:22px}.operating-grid h3{margin:12px 0}.operating-grid p{margin-bottom:0}.home-faq details:first-child{padding-top:0}.home-lab .final-ignite{padding:60px 0 55px}.final-ignite h2{font-size:64px}.final-signoff{font-size:9px}.home-lab .text-link{font-size:13px}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.lab-pillar{transition:none}.lab-pillar:hover{transform:none}}
+
+/* Goal finder */
+.starting-point{background:#0d151f;border-block:1px solid #2b4053}
+.goal-buttons{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:22px}
+.goal-buttons button{font:650 14px system-ui;color:#b7cadb;background:#0a121b;border:1px solid #3a5369;border-radius:8px;padding:14px 18px;cursor:pointer;min-height:48px}
+.goal-buttons button[aria-pressed=true]{background:#ff8b30;color:#130b04;border-color:#ff8b30}
+.goal-result{display:grid;grid-template-columns:1.3fr .8fr;gap:48px;padding:30px;border:1px solid #345168;border-radius:14px;background:radial-gradient(ellipse at 100% 0,#1b507933,transparent 70%),#08121c}
+.goal-result h3{font-size:30px;line-height:1.15;letter-spacing:-.035em;margin:14px 0}
+.goal-result p{margin-bottom:0;max-width:610px}
+.goal-result>div:last-child{display:flex;flex-direction:column;justify-content:center;align-items:flex-start;gap:14px}
+.goal-result a:not(.btn){color:#a7d5ff;font-size:14px;padding:6px 0}
+@media(max-width:700px){.goal-buttons{display:grid;grid-template-columns:1fr 1fr;gap:8px}.goal-buttons button{padding:12px 10px;font-size:13px}.goal-result{grid-template-columns:1fr;gap:24px;padding:22px}.goal-result h3{font-size:27px}.goal-result .btn{font-size:13px;gap:10px}}
+@media(max-width:360px){.ignite-copy .actions{flex-wrap:wrap;gap:10px 20px}.home-lab .final-ignite h2{font-size:52px}}

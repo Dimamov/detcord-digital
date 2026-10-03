@@ -29,3 +29,8 @@ header .original-logo .original-wordmark,.footer-brand .original-logo .original-
  header .original-logo .original-emblem img{width:88px;left:-20px}
  header .original-logo .original-wordmark{height:27px}
 }
+
+/* Keep small-screen controls clear and avoid inherited form sizing. */
+header a[aria-current=page]:not(.cta){color:#fff;text-decoration:underline;text-decoration-color:#ff984d;text-underline-offset:7px}
+@media(max-width:560px){header>.wrap{padding-inline:16px}header nav{gap:12px;height:68px}.original-logo{max-width:calc(100vw - 88px)}.contact-lab-form .contact-pref label{min-height:40px}.contact-lab-form .consent{display:flex;align-items:flex-start;gap:10px}.contact-lab-form .consent input{margin-top:5px;flex:none;width:18px;height:18px}.contact-lab-form .contact-pref input{width:18px;height:18px}.footer-column a{padding:4px 0}}
+@media(max-width:360px){header .original-logo{width:190px;min-width:190px;gap:5px}header .original-logo .original-emblem{width:55px}header .original-logo .original-wordmark{width:130px}}

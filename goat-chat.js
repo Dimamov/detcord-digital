@@ -1,5 +1,5 @@
 (() => {
-  const style = document.createElement('link'); style.rel = 'stylesheet'; style.href = '/goat-chat.css?v=mobile-2'; document.head.append(style);
+  const style = document.createElement('link'); style.rel = 'stylesheet'; style.href = '/goat-chat.css?v=mobile-3'; document.head.append(style);
   const root = document.createElement('div'); root.id = 'goat-chat';
   root.innerHTML = `<button class="goat-launch" aria-expanded="false" aria-controls="goat-panel"><img class="goat-launch-avatar" src="/goat-chat-avatar.jpg" alt=""> <span>Chat with The GOAT</span></button><section id="goat-panel" class="goat-panel" role="dialog" aria-label="Chat with The GOAT" hidden><div class="goat-head"><div class="goat-identity"><img class="goat-avatar" src="/goat-chat-avatar.jpg" alt="The Digital GOAT"><div><strong>The GOAT</strong><small>Mad Scientist of Marketing · AI</small></div></div><button class="goat-close" aria-label="Close chat">×</button></div><div class="goat-messages" role="log" aria-live="polite" aria-relevant="additions"></div><div class="goat-options"><button>More leads</button><button>A better website</button><button>Review my website</button><button>Marketing advice</button></div><form class="goat-form"><label for="goat-question" class="goat-sr">Your message</label><input id="goat-question" maxlength="1200" placeholder="Ask the GOAT…" autocomplete="off" required><button type="submit">Send</button></form><div class="goat-foot"><a href="/contact.html">Talk to a person</a><span>Chats saved for 30 days. <a href="/privacy.html">Privacy</a></span></div></section>`;
   document.body.append(root);
@@ -8,7 +8,7 @@
   function message(text, who) { const el = document.createElement('div'); el.className = `goat-message goat-${who}`; el.textContent = text; log.append(el); log.scrollTop = log.scrollHeight; return el; }
   message('Welcome to the lab. I’m the GOAT. What are we dissecting today—your ads, your website, or your next growth experiment?','assistant');
   const mobile = () => window.matchMedia('(max-width: 600px)').matches;
-  let savedOverflow = '';
+  let bodyStyles = null, scrollBeforeChat = 0;
   function viewport() {
     const v = window.visualViewport;
     root.style.setProperty('--goat-height', (v ? v.height : window.innerHeight) + 'px');
@@ -23,15 +23,30 @@
     panel.hidden = !open; launch.setAttribute('aria-expanded', String(open));
     root.classList.toggle('goat-open', open);
     if (open) {
-      if (mobile()) { savedOverflow = document.body.style.overflow; document.body.style.overflow = 'hidden'; }
-      else input.focus();
+      if (mobile()) {
+        scrollBeforeChat=window.scrollY;
+        bodyStyles={position:document.body.style.position,top:document.body.style.top,width:document.body.style.width,overflow:document.body.style.overflow};
+        Object.assign(document.body.style,{position:'fixed',top:-scrollBeforeChat+'px',width:'100%',overflow:'hidden'});
+        panel.setAttribute('aria-modal','true');
+        root.querySelector('.goat-close').focus({preventScroll:true});
+      } else input.focus();
       viewport();
     } else {
-      input.blur(); document.body.style.overflow = savedOverflow; launch.focus();
+      input.blur();
+      if(bodyStyles){Object.assign(document.body.style,bodyStyles);bodyStyles=null;window.scrollTo({top:scrollBeforeChat,behavior:'instant'});}
+      panel.removeAttribute('aria-modal');launch.focus({preventScroll:true});
     }
   }
   launch.onclick = () => toggle(panel.hidden); root.querySelector('.goat-close').onclick = () => toggle(false);
-  root.addEventListener('keydown', e => { if (e.key === 'Escape') toggle(false); });
+  root.addEventListener('keydown', e => {
+    if(e.key==='Escape'){toggle(false);return;}
+    if(e.key==='Tab'&&!panel.hidden&&panel.getAttribute('aria-modal')==='true'){
+      const focusable=[...panel.querySelectorAll('button:not(:disabled),input:not(:disabled),a[href]')].filter(el=>el.getClientRects().length);
+      const first=focusable[0],last=focusable.at(-1);
+      if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}
+      else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}
+    }
+  });
   async function ask(text) {
     if (busy || !text.trim()) return;
     if(lastActivity && Date.now()-lastActivity>=300000){conversationId=crypto.randomUUID();history=[];}

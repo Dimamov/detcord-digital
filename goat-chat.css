@@ -30,3 +30,8 @@
   #goat-chat.goat-compact .goat-head{padding:6px 12px}
   #goat-chat.goat-compact .goat-avatar{width:34px;height:34px}
 }
+
+#goat-chat .goat-head strong{line-height:1.2}
+#goat-chat .goat-launch{max-width:calc(100vw - 24px)}
+#goat-chat .goat-foot{line-height:1.5}
+@media(max-width:600px){#goat-chat.goat-open{isolation:isolate;background:#0e1217}#goat-chat .goat-panel{display:flex;flex-direction:column}#goat-chat .goat-form{background:#0e1217}#goat-chat .goat-foot{flex-wrap:wrap}#goat-chat.goat-compact .goat-head small{display:none}#goat-chat.goat-compact .goat-foot{padding-bottom:6px}#goat-chat .goat-messages{scrollbar-width:thin}#goat-chat .goat-launch{font-size:13px!important}}
