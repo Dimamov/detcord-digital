@@ -15,3 +15,6 @@
 .goal-result a:not(.btn){color:#a7d5ff;font-size:14px;padding:6px 0}
 @media(max-width:700px){.goal-buttons{display:grid;grid-template-columns:1fr 1fr;gap:8px}.goal-buttons button{padding:12px 10px;font-size:13px}.goal-result{grid-template-columns:1fr;gap:24px;padding:22px}.goal-result h3{font-size:27px}.goal-result .btn{font-size:13px;gap:10px}}
 @media(max-width:360px){.ignite-copy .actions{flex-wrap:wrap;gap:10px 20px}.home-lab .final-ignite h2{font-size:52px}}
+
+.home-lab .eyebrow{font-size:12px}.ignite-copy>p{max-width:540px}.hero-principle strong{font-size:15px}.hero-principle>span{font-size:12px}.pillar-body p{font-size:16px}.pillar-tools,.pillar-body>strong,.all-capabilities>span,.bio-link{font-size:14px}.portrait-tag a{font-size:14px}.home-faq details p{font-size:16px}.home-faq summary{min-height:44px}.operating-grid p{font-size:16px}.lab-photo>span{font-size:12px}
+@media(max-width:700px){.ignite-copy .eyebrow{font-size:12px}.home-lab .ignite-hero{padding-top:28px}.pagehero .lab-art{min-height:150px}.lab-intro .lab-photo{display:none}.home-lab .text-link{font-size:15px}.discipline-strip .wrap{font-size:12px}.lab-section-heading{gap:18px}}

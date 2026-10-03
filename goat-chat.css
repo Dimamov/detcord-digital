@@ -40,3 +40,8 @@
 #goat-chat .goat-panel[hidden],#goat-chat .goat-options[hidden]{display:none!important}
 #goat-chat .goat-launch{width:max-content;max-width:calc(100vw - 24px);white-space:nowrap;line-height:1.2}
 #goat-chat .goat-launch span{white-space:nowrap}
+
+/* A compact launcher leaves the mobile page readable. */
+#goat-chat .goat-head small,#goat-chat .goat-foot,#goat-chat .goat-foot span{font-size:14px}#goat-chat .goat-options button{min-height:44px;font-size:14px!important}#goat-chat .goat-foot>a{font-size:14px}
+@media(max-width:600px){#goat-chat:not(.goat-open){right:12px;bottom:max(12px,env(safe-area-inset-bottom))}#goat-chat .goat-launch{height:52px;padding:6px 12px 6px 6px;gap:7px}#goat-chat .goat-launch-avatar{width:36px;height:36px}#goat-chat .goat-launch .goat-launch-label{display:none}#goat-chat .goat-launch .goat-launch-short{display:inline;font-size:14px}#goat-chat .goat-foot{align-items:flex-start}#goat-chat .goat-foot span{font-size:12px}#goat-chat .goat-head small{font-size:12px}}
+@media(min-width:601px){#goat-chat .goat-launch-short{display:none}}
