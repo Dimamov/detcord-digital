@@ -24,3 +24,6 @@
 
 /* Render long-page sections as they approach the viewport. Content remains in the DOM. */
 @supports(content-visibility:auto){.home-lab>section:not(.ignite-hero){content-visibility:auto;contain-intrinsic-size:auto 700px}}
+
+/* Resolve exact section positions before following in-page links. */
+.home-lab:has(:target)>section,.home-lab:target>section{content-visibility:visible}
