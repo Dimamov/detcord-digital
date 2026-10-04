@@ -154,3 +154,55 @@ header{background:#0b1017!important;border-bottom:1px solid #202a36!important}he
 .source-status,.report-upload-box{background:#111821!important;border-color:#344054!important;color:#f2f4f7!important}
 .report-upload-box input[type=file]{background:#0d141d!important}
 @media(max-width:650px){#dashboard{background:#0b1017!important}}
+
+
+/* Mobile account management: compact, readable, consistent dark surfaces. */
+:root{--portal-yellow:#ff8a45}
+#dashboard{font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+#dashboard button{font-weight:600;min-height:44px}
+#dashboard button:not(.secondary),#dashboard .pay{background:#ff8a45!important;color:#111821!important}
+#dashboard input,#dashboard select,#dashboard textarea{font-size:16px}
+#dashboard .eyebrow{font-size:12px;color:#a6b1c1!important}
+#dashboard .heading{gap:16px;align-items:flex-start}
+#dashboard .heading>div{min-width:0}
+#dashboard .heading h1{font-size:28px;line-height:1.15}
+#logout{white-space:nowrap;flex-shrink:0}
+#dashboard .heading .muted{max-width:540px;margin-bottom:0}
+#dashboard .actions[aria-label="Client options"] #choose-new-client{background:#ff8a45!important;color:#111821!important;border-color:#ff8a45!important}
+#dashboard .actions[aria-label="Client options"] button[aria-pressed="true"]{outline:2px solid #ffad7b;outline-offset:3px}
+#dashboard .danger-action,#dashboard #delete-client{background:transparent!important;color:#ffaaa5!important;border:1px solid #6d373b!important}
+.rep-row{padding:18px 0;border-bottom:1px solid #26313f;min-width:0}
+.rep-row:last-child{border-bottom:0;padding-bottom:0}
+.rep-row .check{margin:0 0 12px;align-items:center}
+.rep-identity{display:flex;flex-direction:column;gap:4px;min-width:0;line-height:1.4}
+.rep-identity strong{font-size:16px;font-weight:600}
+.rep-email{font-size:14px;color:#b8c3d2;overflow-wrap:anywhere}
+.rep-actions{display:flex;gap:10px;flex-wrap:wrap;padding-left:32px}
+.rep-row .muted{padding-left:32px;font-size:14px;line-height:1.5;margin:10px 0 0}
+#dashboard .tabs button{background:transparent!important;color:#b8c3d2!important}
+#dashboard .tabs button[aria-selected="true"]{background:#253448!important;color:#fff!important}
+button:disabled{cursor:not-allowed}
+@media(max-width:650px){
+ header{height:64px;padding:0 16px;gap:16px}header img{width:106px;height:48px}header a{font-size:14px}
+ #dashboard{padding:20px 16px calc(28px + env(safe-area-inset-bottom))!important;min-height:calc(100dvh - 64px)!important}
+ #dashboard .heading{position:relative;padding-right:82px;padding-bottom:18px}
+ #dashboard .heading h1{font-size:26px;margin:8px 0}
+ #dashboard .heading .eyebrow{font-size:11px;letter-spacing:.08em}
+ #dashboard .heading .muted{font-size:14px;line-height:1.5}
+ #logout{position:absolute;right:0;top:0;padding:9px 10px!important;font-size:14px!important}
+ #dashboard .admin-console{padding:18px 0;background:transparent!important;border:0!important;border-bottom:1px solid #26313f!important;border-radius:0;margin:0}
+ #dashboard .admin-console h2{font-size:23px;line-height:1.2}
+ #dashboard .actions[aria-label="Client options"]{grid-template-columns:1fr 1fr;gap:10px;margin:16px 0}
+ #dashboard .actions[aria-label="Client options"] button{min-height:46px;padding:10px 8px;font-size:14px}
+ .rep-actions{padding-left:32px;gap:10px}
+ #dashboard .rep-actions button{font-size:14px;padding:9px 12px}
+ #dashboard .rep-actions .danger-action{border:0!important;padding-left:0;padding-right:0}
+ #dashboard details{margin:14px 0;padding-top:10px}
+ #dashboard summary{font-weight:600;min-height:44px;line-height:1.4}
+ #dashboard .panel,#dashboard .card{min-width:0}
+ #dashboard .section-heading{display:flex;flex-wrap:wrap;gap:12px}
+ #dashboard .tabs{position:static;gap:6px}
+ .command-card span{font-size:12px;letter-spacing:.04em}.command-card small{font-size:14px}
+ .next-action{flex-wrap:wrap;gap:10px}
+ #signin,#setup-password{margin:24px 16px;padding:24px}
+}
