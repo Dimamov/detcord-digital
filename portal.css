@@ -119,3 +119,12 @@ main{max-width:1240px;padding:28px 24px 64px}
 #signin h1,#setup-password h1{font-size:38px;letter-spacing:-.03em}
 #signin button,#setup-password button{background:#f2c94c;color:#101828;border-radius:6px}
 @media(max-width:650px){main{padding:16px 12px 40px}#dashboard{border-radius:8px;padding:16px}.command-card{min-height:100px}.goat-command{padding:15px}}
+
+/* Portal shell: eliminate the floating white canvas */
+body{background:#f7f8fa!important}
+header{background:#fff!important;border-bottom:1px solid #e4e7ec!important}
+header a{color:#667085!important}
+main{max-width:none!important;padding:0!important}
+#dashboard{width:100%!important;max-width:none!important;min-height:calc(100vh - 72px)!important;margin:0!important;padding:32px max(24px,calc((100vw - 1240px)/2)) 64px!important;border-radius:0!important;box-shadow:none!important;background:#f7f8fa!important}
+#signin,#setup-password{margin-top:64px}
+@media(max-width:650px){#dashboard{min-height:calc(100vh - 72px)!important;padding:20px 14px 44px!important;border-radius:0!important}}
