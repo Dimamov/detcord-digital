@@ -33,11 +33,25 @@ document.querySelectorAll('header .links a, .mobile-menu-panel a').forEach(a=>{
  function validatePreferences() {
   preferences[0].setCustomValidity(preferences.some(input => input.checked) ? '' : 'Choose at least one way we may contact you.');
   phone.required = preferences.some(input => input.checked && ['contact_by_call','contact_by_text'].includes(input.name));
+  form.querySelector('[for="contact-phone"]').textContent = phone.required ? 'Phone (required for calls or texts)' : 'Phone (optional)';
  }
  form.addEventListener('change', validatePreferences); validatePreferences();
- form.addEventListener('submit', () => {
-  const status = document.getElementById('form-status');
-  if (status) status.textContent = 'Continue with the form provider’s verification step to complete your request.';
+ form.addEventListener('submit', async event => {
+  event.preventDefault();
+  validatePreferences();
+  if (!form.reportValidity()) return;
+  const status = document.getElementById('form-status'), button = form.querySelector('[type="submit"]');
+  if (button.disabled) return;
+  button.disabled = true; status.textContent = 'Sending your request…';
+  try {
+   const response = await fetch(form.action, {method:'POST', body:new FormData(form), headers:{Accept:'application/json'}, signal:AbortSignal.timeout(25000)});
+   const data = await response.json();
+   if (!response.ok) throw new Error(data.error || 'Your request could not be sent. Please try again.');
+   location.assign('/thanks');
+  } catch(error) {
+   status.textContent = error.name === 'TimeoutError' ? 'The confirmation timed out. Please email info@detcorddigital.com if you are unsure whether your request arrived.' : error.message;
+   button.disabled = false;
+  }
  });
 })();
 

@@ -43,6 +43,21 @@ export class GoatArchive {
  }
  async fetch(request) {
   const url=new URL(request.url);this.cleanup();
+  if(url.pathname==='/contact-limit' && request.method==='POST') {
+   const {key}=await request.json();
+   if(typeof key!=='string'||!/^[a-f0-9]{64}$/.test(key))return json({error:'Invalid key'},400);
+   this.sql.exec('CREATE TABLE IF NOT EXISTS contact_limits (key TEXT PRIMARY KEY, attempts INTEGER NOT NULL, expires INTEGER NOT NULL)');
+   const now=Date.now();
+   this.sql.exec('DELETE FROM contact_limits WHERE expires<=?',now);
+   let allowed=false;
+   this.ctx.storage.transactionSync(()=>{
+    const row=this.rows('SELECT attempts FROM contact_limits WHERE key=?',key)[0];
+    if(row?.attempts>=5)return;
+    this.sql.exec('INSERT INTO contact_limits(key,attempts,expires) VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET attempts=attempts+1',key,now+3600000);
+    allowed=true;
+   });
+   return json({allowed},allowed?200:429);
+  }
   if(url.pathname==='/record' && request.method==='POST') {
    const data=await request.json();
    if(!uuid(data.conversationId)||!uuid(data.turnId)||typeof data.question!=='string'||typeof data.answer!=='string')return json({error:'Invalid turn'},400);

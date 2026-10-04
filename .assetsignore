@@ -18,3 +18,8 @@ portal.js
 portal-contracts.js
 portal-access.js
 contract-template.js
+
+contact-api.js
+email-template.js
+
+tests/

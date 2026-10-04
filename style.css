@@ -179,3 +179,6 @@ nav{height:78px}
 
 /* Reduce initial mobile compositing while retaining the desktop treatment. */
 @media(max-width:700px){header{backdrop-filter:none;background:#07090c}.portrait-tag{backdrop-filter:none}.ignite-copy h1 em{background:none;color:#91c7ef;-webkit-text-fill-color:currentColor}}
+
+/* Consultation fields and consent retain readable inline text. */
+.consent>span{flex:1;min-width:0}.consent>input{flex:none}.consent a{text-decoration:underline;text-underline-offset:3px}.contact-details{border:1px solid #293745;border-radius:10px;padding:14px}.contact-details summary{cursor:pointer;font-weight:750}.contact-details[open] summary{margin-bottom:16px}.contact-details .field-label{display:block;margin-top:12px}

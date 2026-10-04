@@ -1,5 +1,5 @@
 (() => {
-  const style = document.createElement('link'); style.rel = 'stylesheet'; style.href = '/goat-chat.css?v=ui-seo-20261003'; document.head.append(style);
+  const style = document.createElement('link'); style.rel = 'stylesheet'; style.href = '/goat-chat.css?v=collision-20261004'; document.head.append(style);
   const root = document.createElement('div'); root.id = 'goat-chat';
   root.innerHTML = `<button class="goat-launch" aria-label="Chat with The GOAT" aria-expanded="false" aria-controls="goat-panel"><img class="goat-launch-avatar" src="/goat-96.webp" width="96" height="96" alt=""> <span class="goat-launch-label">Chat with The GOAT</span><span class="goat-launch-short" aria-hidden="true">Ask GOAT</span></button><section id="goat-panel" class="goat-panel" role="dialog" aria-label="Chat with The GOAT" hidden><div class="goat-head"><div class="goat-identity"><img class="goat-avatar" src="/goat-96.webp" width="96" height="96" alt="The Digital GOAT"><div><strong>The GOAT</strong><small>Mad Scientist of Marketing · AI</small></div></div><button class="goat-close" aria-label="Close chat">×</button></div><div class="goat-messages" role="log" aria-live="polite" aria-relevant="additions"></div><div class="goat-options"><button>More leads</button><button>A better website</button><button>Review my website</button><button>Marketing advice</button></div><form class="goat-form"><label for="goat-question" class="goat-sr">Your message</label><input id="goat-question" maxlength="1200" placeholder="Ask the GOAT…" autocomplete="off" required><button type="submit">Send</button></form><div class="goat-foot"><a href="/contact">Talk to a person</a><span>Chats saved for 30 days. <a href="/privacy">Privacy</a></span></div></section>`;
   document.body.append(root);
@@ -19,6 +19,16 @@
   window.visualViewport?.addEventListener('scroll', viewport);
   window.addEventListener('resize', viewport);
   viewport();
+  // Move the closed launcher out of the way while a form or calculator is on screen.
+  const protectedRegions = [...document.querySelectorAll('#contact-form, .lab-calculator, .lab-result')];
+  if (protectedRegions.length) {
+   const visible = new Set();
+   const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => entry.isIntersecting ? visible.add(entry.target) : visible.delete(entry.target));
+    root.classList.toggle('goat-clear-controls', visible.size > 0);
+   });
+   protectedRegions.forEach(region => observer.observe(region));
+  }
   function toggle(open) {
     panel.hidden = !open; launch.setAttribute('aria-expanded', String(open));
     root.classList.toggle('goat-open', open);
