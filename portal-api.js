@@ -26,7 +26,7 @@ export class ClientPortal{
  this.sql.exec('CREATE TABLE IF NOT EXISTS chunks(id TEXT,seq INTEGER,body BLOB,PRIMARY KEY(id,seq))');
  }
  rows(q,...p){return this.sql.exec(q,...p).toArray();}
- async fetch(req){try{return await this.handle(req);}catch(e){console.error('Portal request failed');return json({error:'Unable to complete this request. Please try again.'},500);}}
+ async fetch(req){try{return await this.handle(req);}catch(e){console.error('Portal request failed',e?.stack||e);const p=new URL(req.url).pathname;if(p.endsWith('/report-generate'))return json({error:'Report generation failed: '+String(e?.message||e||'unknown error').slice(0,300)},500);return json({error:'Unable to complete this request. Please try again.'},500);}}
  async handle(req){
  const url=new URL(req.url),route=url.pathname.replace('/api/portal',''),now=Date.now();
  this.sql.exec('DELETE FROM sessions WHERE expires<?',now);this.sql.exec('DELETE FROM attempts WHERE expires<?',now);
