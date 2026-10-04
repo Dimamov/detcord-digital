@@ -40,3 +40,18 @@ document.querySelectorAll('header .links a, .mobile-menu-panel a').forEach(a=>{
   if (status) status.textContent = 'Continue with the form provider’s verification step to complete your request.';
  });
 })();
+
+(() => {
+ const sections=[...document.querySelectorAll('body:not(.site-home) section[id^="service-category-"]')];
+ if(!sections.length)return;
+ const narrow=matchMedia('(max-width:767px)');
+ for(const section of sections){const grid=section.querySelector('.capability-grid');if(!grid)continue;const details=document.createElement('details');details.className='service-accordion';const summary=document.createElement('summary');summary.textContent='Explore '+section.querySelector('h2').textContent;details.append(summary);grid.before(details);details.append(grid);details.open=!narrow.matches;}
+ const sync=()=>document.querySelectorAll('.service-accordion').forEach(d=>d.open=!narrow.matches);narrow.addEventListener('change',sync);
+ const openTarget=()=>{const target=document.getElementById(location.hash.slice(1));target?.querySelector('.service-accordion')?.setAttribute('open','');};addEventListener('hashchange',openTarget);openTarget();
+})();
+
+(() => {
+ const text=document.querySelector('[name="contact_by_text"]'),box=document.getElementById('sms-consent-wrap'),consent=document.getElementById('sms-consent');
+ if(!text||!box||!consent)return;
+ const sync=()=>{box.hidden=!text.checked;consent.required=text.checked;consent.disabled=!text.checked;if(!text.checked)consent.checked=false;};text.addEventListener('change',sync);sync();
+})();

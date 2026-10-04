@@ -66,3 +66,7 @@ header a[aria-current=page]:not(.cta){color:#fff;text-decoration:underline;text-
 .example-consult h3{font-size:1.5rem;margin:0 0 12px}.example-consult p{font-size:1rem;line-height:1.65}
 @media(max-width:900px){.example-grid{grid-template-columns:1fr}.sample-brand,.sample-report,.sample-flow{min-height:0}.example-consult{align-items:flex-start;flex-direction:column}}
 @media(max-width:640px){#custom-growth-solutions .capability-grid,#business-growth-services .capability-grid,#working-with-detcord .capability-grid{grid-template-columns:1fr}.example-card,#custom-growth-solutions .card,#business-growth-services .card,#working-with-detcord .card,#lead-workflow-example .card{padding:22px}}
+
+.service-accordion summary{cursor:pointer;padding:16px;border:1px solid #47627a;border-radius:8px;color:#edf5ff;font-weight:700;margin-bottom:20px}.calculator-extra{display:grid;grid-template-columns:1fr 1fr;gap:14px}.calculator-extra dd{margin:0;font-size:1.4rem;color:#fff}.calculator-extra dt{color:#b9cad8}@media(min-width:768px){.service-accordion>summary{display:none}}@media(max-width:767px){.calculator-extra{grid-template-columns:1fr}.original-logo{flex-shrink:1}.links .cta{white-space:normal}.section-jumps a{font-size:13px}}
+
+@media(max-width:560px){header .links .cta:after{content:'Free consultation';font-size:12px}header .links .cta{max-width:150px}}

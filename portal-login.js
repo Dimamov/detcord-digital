@@ -1,0 +1,9 @@
+(() => {
+ const $=s=>document.querySelector(s),notice=t=>$('#notice').textContent=t;
+ const api=async(route,data)=>{const r=await fetch('/api/portal'+route,{method:data?'POST':'GET',credentials:'same-origin',headers:data?{'Content-Type':'application/json'}:{},body:data?JSON.stringify(data):undefined});const d=await r.json();if(!r.ok)throw Error(d.error||'Unable to complete the request.');return d;};
+ const params=new URLSearchParams(location.search),id=params.get('setup'),raw=location.hash.slice(1),token=new URLSearchParams(raw).get('token')||raw;
+ $('#login').addEventListener('submit',async e=>{e.preventDefault();const button=e.target.querySelector('button');button.disabled=true;try{await api('/login',Object.fromEntries(new FormData(e.target)));location.reload();}catch(err){notice(err.message);button.disabled=false;}});
+ if(id&&token){$('#signin').hidden=true;$('#setup-password').hidden=false;$('#activate-account').addEventListener('submit',async e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.target));if(d.password!==d.confirm)return notice('Passwords do not match.');const b=e.target.querySelector('button');b.disabled=true;try{await api('/activate',{id,token,password:d.password});history.replaceState({},'',location.pathname);$('#setup-password').hidden=true;$('#signin').hidden=false;notice('Password created. Sign in with your email and new password.');}catch(err){notice(err.message);}finally{b.disabled=false;}});}
+ else if(id||token){$('#signin').hidden=true;notice('This setup link is incomplete. Ask Detcord for a new invitation.');}
+ else api('/me').then(()=>location.reload()).catch(()=>{});
+})();
