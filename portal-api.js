@@ -48,7 +48,7 @@ export class ClientPortal{
  if(await hash(p)===await hash(secret))client='admin';
  }else{const rep=this.rows('SELECT * FROM staff WHERE email=?',email)[0],row=rep||this.rows('SELECT * FROM clients WHERE email=?',email)[0];if(row&&await password(p,row.salt)===row.password)client=rep?'staff:'+row.id:row.id;}
  if(client&&this.rows('SELECT id FROM archived_accounts WHERE id=?',client.startsWith('staff:')?client.slice(6):client).length)client=null;
- if(!client)return json({error:email==='admin'?'The password does not match the deployed administrator key. Check PORTAL_ADMIN_KEY in Cloudflare.':'Sign-in details not accepted.'},401);
+ if(!client)return json({error:'Sign-in details not accepted.'},401);
  this.sql.exec('DELETE FROM attempts WHERE id=?',attemptId);const token=crypto.randomUUID()+crypto.randomUUID();this.sql.exec('INSERT INTO sessions VALUES(?,?,?)',await hash(token),client,now+28800000);
  return json({ok:true},200,{'Set-Cookie':'detcord_portal='+token+'; Path=/api/portal; Secure; HttpOnly; SameSite=Strict; Max-Age=28800'});
  }
