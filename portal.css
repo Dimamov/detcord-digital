@@ -73,3 +73,16 @@ body{background:linear-gradient(135deg,#070b10 0,#0d141d 100%);min-height:100vh}
 .presentation-mode .insight-grid strong{font-size:clamp(13px,1.75vh,19px);line-height:1.3}
 .presentation-mode .report-slide-brand{width:clamp(58px,7vw,90px);right:20px;bottom:16px}
 @media print{body.printing-report .report-slide-brand{display:block!important;position:absolute!important;right:.2in!important;bottom:.15in!important;width:.72in!important}}
+
+/* Report presentation: true viewport slides with content fitting */
+.presentation-mode{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;margin:0!important;padding:0!important;background:#080d14!important;z-index:2147483000!important}
+.presentation-mode .report-slide.active-report-slide{position:absolute!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;min-height:100vh!important;margin:0!important;border-radius:0!important;box-shadow:none!important;padding:clamp(42px,6vh,72px) clamp(54px,7vw,110px) clamp(64px,8vh,90px)!important;justify-content:center!important;transform:none!important}
+.presentation-mode .report-slide.active-report-slide>*:not(.report-slide-brand){font-size:calc(1em * var(--slide-scale,1))}
+.presentation-mode .report-slide h2{font-size:calc(clamp(30px,5vh,58px) * var(--slide-scale,1))!important;max-width:1100px}
+.presentation-mode .report-slide p{font-size:calc(clamp(15px,2.25vh,23px) * var(--slide-scale,1))!important;line-height:1.32!important;max-width:1100px}
+.presentation-mode .report-slide ul{font-size:calc(clamp(14px,2.15vh,22px) * var(--slide-scale,1))!important;line-height:1.28!important;max-width:1100px}
+.presentation-mode .report-slide li{margin:.22em 0!important}
+.presentation-mode .report-slide-dense h2{margin-bottom:.12em!important}
+.presentation-mode .report-slide-dense p,.presentation-mode .report-slide-dense ul{line-height:1.2!important}
+.presentation-mode .report-export-bar{bottom:12px!important;opacity:.92}
+.presentation-mode .report-slide-brand{right:26px!important;bottom:22px!important;width:72px!important}
