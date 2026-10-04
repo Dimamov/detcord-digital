@@ -69,4 +69,8 @@ header a[aria-current=page]:not(.cta){color:#fff;text-decoration:underline;text-
 
 .service-accordion summary{cursor:pointer;padding:16px;border:1px solid #47627a;border-radius:8px;color:#edf5ff;font-weight:700;margin-bottom:20px}.calculator-extra{display:grid;grid-template-columns:1fr 1fr;gap:14px}.calculator-extra dd{margin:0;font-size:1.4rem;color:#fff}.calculator-extra dt{color:#b9cad8}@media(min-width:768px){.service-accordion>summary{display:none}}@media(max-width:767px){.calculator-extra{grid-template-columns:1fr}.original-logo{flex-shrink:1}.links .cta{white-space:normal}.section-jumps a{font-size:13px}}
 
-@media(max-width:560px){header .links .cta:after{content:'Free consultation';font-size:12px}header .links .cta{max-width:150px}}
+.service-jumpbar{position:sticky;top:74px;z-index:40;background:#090f16;border-block:1px solid #345268}.service-jumpbar .section-jumps{margin:0;padding:10px 0;flex-wrap:nowrap;overflow-x:auto}.service-jumpbar a{white-space:nowrap;flex-shrink:0}body:not(.site-home) section[id]{scroll-margin-top:150px}@media(max-width:560px){.service-jumpbar{top:68px}}
+
+@media(max-width:560px){header .links .cta:after{content:"Free consultation";font-size:12px}header .links .cta{max-width:150px}}
+
+@supports(content-visibility:auto){body:not(.site-home) main>section:not(.pagehero):not(:first-child){content-visibility:auto;contain-intrinsic-size:auto 700px}body:not(.site-home) main:has(:target)>section,body:not(.site-home) main:target>section{content-visibility:visible!important}}

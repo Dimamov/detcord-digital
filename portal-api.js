@@ -32,10 +32,7 @@ export class ClientPortal{
  this.sql.exec('DELETE FROM sessions WHERE expires<?',now);this.sql.exec('DELETE FROM attempts WHERE expires<?',now);
  if(route==='/access-intake')return accessIntake(this,req,url,now);
  if(route==='/activate'&&req.method==='POST'){const d=await req.json(),id=String(d.id||''),token=String(d.token||''),p=String(d.password||'');if(p.length<12||p.length>256)return json({error:'Use a password of at least 12 characters.'},400);const setup=this.rows('SELECT * FROM account_setup WHERE id=?',id)[0];if(!setup||setup.expires<now||await hash(token)!==setup.token_hash)return json({error:'This setup link is invalid or expired. Ask Detcord for a new invitation.'},400);const table=setup.kind==='staff'?'staff':'clients',salt=crypto.randomUUID();this.sql.exec('UPDATE '+table+' SET salt=?,password=? WHERE id=?',salt,await password(p,salt),id);this.sql.exec('DELETE FROM account_setup WHERE id=?',id);return json({ok:true});}
- if(route==='/setup'&&req.method==='GET'){
- const key=this.env.PORTAL_ADMIN_KEY;
- return json({adminKeyPresent:!!key,minimumLengthMet:!!key&&key.length>=12,extraEdgeSpaces:!!key&&key!==key.trim(),minimumLength:12});
- }
+
  if(route==='/login'&&req.method==='POST'){
  const ip=req.headers.get('CF-Connecting-IP')||'unknown';const attemptId=await hash(ip);
  const count=this.rows('SELECT count FROM attempts WHERE id=?',attemptId)[0]?.count||0;if(count>=10)return json({error:'Too many sign-in attempts. Try again in 15 minutes.'},429);
@@ -56,6 +53,11 @@ export class ClientPortal{
  if(!session)return json({error:'Please sign in.'},401);
  if(route==='/logout'&&req.method==='POST'){this.sql.exec('DELETE FROM sessions WHERE token=?',await hash(token));return json({ok:true},200,{'Set-Cookie':['detcord_portal=; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=0','detcord_portal=; Path=/api/portal; Secure; HttpOnly; SameSite=Strict; Max-Age=0']});}
  const owner=session.client==='admin',rep=session.client.startsWith('staff:'),repId=rep?session.client.slice(6):null,admin=owner||rep;
+ if(route==='/setup'&&req.method==='GET'){
+ if(!owner)return json({error:'Access denied.'},403);
+ const key=this.env.PORTAL_ADMIN_KEY;
+ return json({adminKeyPresent:!!key,minimumLengthMet:!!key&&key.length>=12,extraEdgeSpaces:!!key&&key!==key.trim(),minimumLength:12});
+ }
  if(owner){for(const a of this.rows('SELECT id,kind FROM archived_accounts')){const table=a.kind==='staff'?'staff':'clients';this.sql.exec('DELETE FROM sessions WHERE client=?',table==='staff'?'staff:'+a.id:a.id);this.sql.exec('DELETE FROM assignments WHERE '+(table==='staff'?'staff':'client')+'=?',a.id);this.sql.exec('DELETE FROM account_setup WHERE id=?',a.id);if(table==='staff')this.sql.exec('DELETE FROM staff_invites WHERE id=?',a.id);this.sql.exec('DELETE FROM '+table+' WHERE id=?',a.id);}this.sql.exec('DELETE FROM archived_accounts');}
  if(route==='/me')return json({admin,role:owner?'admin':rep?'sales':'client',client:owner?{name:'Detcord admin'}:rep?this.rows('SELECT id,email,name FROM staff WHERE id=?',repId)[0]:this.rows('SELECT id,email,name FROM clients WHERE id=?',session.client)[0]},200,{'Set-Cookie':['detcord_portal='+token+'; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=28800','detcord_portal=; Path=/api/portal; Secure; HttpOnly; SameSite=Strict; Max-Age=0']});
 
