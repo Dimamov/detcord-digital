@@ -128,3 +128,29 @@ main{max-width:none!important;padding:0!important}
 #dashboard{width:100%!important;max-width:none!important;min-height:calc(100vh - 72px)!important;margin:0!important;padding:32px max(24px,calc((100vw - 1240px)/2)) 64px!important;border-radius:0!important;box-shadow:none!important;background:#f7f8fa!important}
 #signin,#setup-password{margin-top:64px}
 @media(max-width:650px){#dashboard{min-height:calc(100vh - 72px)!important;padding:20px 14px 44px!important;border-radius:0!important}}
+
+/* Detcord dark application shell */
+:root{--portal-bg:#0b1017;--portal-surface:#111821;--portal-surface-2:#151e29;--portal-ink:#f2f4f7;--portal-muted:#98a2b3;--portal-border:#26313f;--portal-navy:#f2c94c}
+body{background:#0b1017!important;color:#f2f4f7!important}
+header{background:#0b1017!important;border-bottom:1px solid #202a36!important}header a{color:#98a2b3!important}
+#dashboard{background:#0b1017!important;color:#f2f4f7!important}
+#dashboard .heading{border-color:#26313f!important}
+#dashboard .heading .muted,#dashboard .meta,#dashboard .muted{color:#98a2b3!important}
+#dashboard .eyebrow{color:#7f8b9b!important}
+#dashboard .panel,#dashboard .card,.command-card{background:#111821!important;border-color:#26313f!important;color:#f2f4f7!important}
+#dashboard input,#dashboard select,#dashboard textarea{background:#0d141d!important;color:#f2f4f7!important;border-color:#344054!important;box-shadow:none!important}
+#dashboard input::placeholder,#dashboard textarea::placeholder{color:#667085!important}
+#dashboard button:not(.secondary),#dashboard .pay{background:#f2c94c!important;color:#101828!important}
+#dashboard .secondary{background:#182230!important;color:#e4e7ec!important;border-color:#344054!important}
+#dashboard .tabs{background:#0b1017!important;border-color:#26313f!important}
+#dashboard .tabs button{color:#98a2b3!important}
+#dashboard .tabs button[aria-selected=true]{background:#1d2939!important;color:#fff!important}
+.goat-command{background:#111821!important;border-color:#344054!important}
+.goat-command-row input{background:#0b1017!important;color:#fff!important;border:1px solid #344054!important}
+.command-card.attention{border-left-color:#f2c94c!important}
+.next-action{border-color:#26313f!important}
+#dashboard details{border-color:#26313f!important}
+.status-pill{background:#102a22!important;color:#75e0a7!important;border-color:#175c45!important}
+.source-status,.report-upload-box{background:#111821!important;border-color:#344054!important;color:#f2f4f7!important}
+.report-upload-box input[type=file]{background:#0d141d!important}
+@media(max-width:650px){#dashboard{background:#0b1017!important}}
