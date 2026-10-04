@@ -8,3 +8,13 @@ README*
 LAUNCH-CHECKLIST.txt
 
 goat-archive.js
+
+portal-private.js
+portal-shell.js
+portal-api.js
+portal-invitations.js
+portal-access-api.js
+portal.js
+portal-contracts.js
+portal-access.js
+contract-template.js

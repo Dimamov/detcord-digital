@@ -10,7 +10,8 @@
       "/client-portal*",
       "/portal.js",
       "/portal-contracts.js",
-      "/portal-access.js"
+      "/portal-access.js",
+      "/contract-template.js"
     ],
     "not_found_handling": "404-page"
   },
