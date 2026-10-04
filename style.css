@@ -176,3 +176,6 @@ nav{height:78px}
 
 /* Preserve the single-scene Lab artwork at every viewport. */
 .goat-visual-split>img,.goat-feature img,.lab-photo>img{display:block;width:100%;height:auto;aspect-ratio:3/2;object-fit:contain}
+
+/* Reduce initial mobile compositing while retaining the desktop treatment. */
+@media(max-width:700px){header{backdrop-filter:none;background:#07090c}.portrait-tag{backdrop-filter:none}.ignite-copy h1 em{background:none;color:#91c7ef;-webkit-text-fill-color:currentColor}}

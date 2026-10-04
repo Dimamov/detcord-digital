@@ -17,7 +17,13 @@
  const tag = document.createElement('script');
  tag.async = true;
  tag.src = 'https://www.googletagmanager.com/gtag/js?id=' + measurementId;
- document.head.appendChild(tag);
+ // Paint the page before parsing the analytics library; queued events remain intact.
+ const loadTag=()=>document.head.appendChild(tag);
+ const afterPaint=()=>requestAnimationFrame(()=>requestAnimationFrame(()=>{
+  if('requestIdleCallback' in window)requestIdleCallback(loadTag,{timeout:2000});
+  else setTimeout(loadTag,0);
+ }));
+ if(document.readyState==='complete')afterPaint();else window.addEventListener('load',afterPaint,{once:true});
  const allowed = new Set(['cta_click','email_click','goal_select','calculator_used','form_start','form_submit_attempt','inquiry_confirmation_view','chat_open','chat_reply_received']);
  window.dataLayer = window.dataLayer || [];
  window.detcordMeasure = (event, details = {}) => {
