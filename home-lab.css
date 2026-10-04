@@ -18,3 +18,6 @@
 
 .home-lab .eyebrow{font-size:12px}.ignite-copy>p{max-width:540px}.hero-principle strong{font-size:15px}.hero-principle>span{font-size:12px}.pillar-body p{font-size:16px}.pillar-tools,.pillar-body>strong,.all-capabilities>span,.bio-link{font-size:14px}.portrait-tag a{font-size:14px}.home-faq details p{font-size:16px}.home-faq summary{min-height:44px}.operating-grid p{font-size:16px}.lab-photo>span{font-size:12px}
 @media(max-width:700px){.ignite-copy .eyebrow{font-size:12px}.home-lab .ignite-hero{padding-top:28px}.pagehero .lab-art{min-height:150px}.lab-intro .lab-photo{display:none}.home-lab .text-link{font-size:15px}.discipline-strip .wrap{font-size:12px}.lab-section-heading{gap:18px}}
+
+/* Avoid a costly full-image filter on mobile's largest painted image. */
+@media(max-width:700px){.goat-portrait>img{filter:none}}
