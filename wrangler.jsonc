@@ -6,7 +6,11 @@
     "directory": ".",
     "binding": "ASSETS",
     "run_worker_first": [
-      "/api/*"
+      "/api/*",
+      "/client-portal*",
+      "/portal.js",
+      "/portal-contracts.js",
+      "/portal-access.js"
     ],
     "not_found_handling": "404-page"
   },
