@@ -38,3 +38,5 @@ body{background:linear-gradient(135deg,#070b10 0,#0d141d 100%);min-height:100vh}
 
 .goat-insights-slide{background:#111923;color:#fff}.goat-insights-slide .eyebrow{color:#ffd400}.insight-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:22px}.insight-grid>div{border:1px solid #394451;border-radius:12px;padding:18px;min-height:120px}.insight-grid small{display:block;color:#ffd400;font-weight:800;letter-spacing:.08em;margin-bottom:12px}.insight-grid strong{font-size:20px;line-height:1.35}
 @media(max-width:650px){.insight-grid{grid-template-columns:1fr}}
+
+.report-upload-box{border:2px dashed #c9d1da;border-radius:14px;padding:20px;margin:18px 0;background:#fff}.report-upload-box>strong{font-size:13px;letter-spacing:.08em}.report-upload-box input[type=file]{background:#f7f8fa!important;border-style:solid!important}
