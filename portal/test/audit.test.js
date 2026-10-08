@@ -140,8 +140,9 @@ describe('website audit', () => {
     expect((await otherRep.call('POST', `/api/clients/${clientId}/audits`, {})).status).toBe(404);
     const a = await (await rep.call('POST', `/api/clients/${clientId}/audits`, {})).json();
     expect((await otherRep.call('GET', `/api/audits/${a.id}`)).status).toBe(404);
-    expect((await otherRep.call('POST', `/api/audits/${a.id}/send`, { channel: 'email', to: 'x@example.com' })).status).toBe(404);
-    expect((await otherRep.call('GET', `/api/audits/${a.id}/shot/mobile`)).status).toBe(404);
+    expect((await otherRep.call('POST', `/api/audits/${a.id}/send`, { channel: 'email', name: 'X', email: 'x@example.com' })).status).toBe(404);
+    expect((await otherRep.call('GET', `/api/reports/${a.id}/shot/mobile`)).status).toBe(404);
+    expect((await otherRep.call('GET', `/api/reports/${a.id}`)).status).toBe(404);
     expect((await admin.call('GET', `/api/audits/${a.id}`)).status).toBe(200);
     expect((await otherRep.call('DELETE', `/api/audits/${a.id}`)).status).toBe(404);
   });
@@ -154,58 +155,92 @@ describe('website audit', () => {
     expect(checkTarget('greatlakesplumbing.com').url.href).toBe('https://greatlakesplumbing.com/');
   });
 
-  it('sends the customer a no-login report that hides what staff removed', async () => {
-    const { rep, clientId } = await setup();
+  it('emails a portal invite that opens the report, and shows it only after it is sent', async () => {
+    const { rep, admin, clientId } = await setup();
     const calls = fakeInternet();
     const a = await (await rep.call('POST', `/api/clients/${clientId}/audits`, {})).json();
     expect((await rep.call('PATCH', `/api/audits/${a.id}`, { hidden: ['stale', 'not-a-real-id'], note: 'Great meeting you today, Sam.' })).status).toBe(200);
     const detail = await (await rep.call('GET', `/api/audits/${a.id}`)).json();
     expect(detail.hidden).toEqual(['stale']);
-    expect(detail.recipients.emails.map((e) => e.value)).toEqual(['sam@greatlakesplumbing.com', 'owner@greatlakesplumbing.com']);
+    expect(detail.people[0]).toMatchObject({ name: 'Sam Rivera', email: 'sam@greatlakesplumbing.com', phone: '248-555-0177', login: null });
 
-    const sent = await rep.call('POST', `/api/audits/${a.id}/send`, { channel: 'email', to: 'sam@greatlakesplumbing.com', firstName: 'Sam' });
-    // The test environment has no email key, so the portal says so instead of claiming it was sent.
+    const sent = await rep.call('POST', `/api/audits/${a.id}/send`, { channel: 'email', name: 'Sam Rivera', email: 'sam@greatlakesplumbing.com' });
+    // The test environment has no email key, so the portal says so and hands staff the link instead of claiming it was sent.
     expect(sent.status).toBe(503);
     const out = await sent.json();
-    expect(out.status).toBe('not_configured');
-    const token = out.shareUrl.split('/r/')[1];
-    expect(token.length).toBeGreaterThan(30);
-
-    const pub = await SELF.fetch(`https://portal.test/api/public/reports/${token}`);
-    expect(pub.status).toBe(200);
-    expect(pub.headers.get('Cache-Control')).toBe('no-store');
-    expect(pub.headers.get('X-Robots-Tag')).toContain('noindex');
-    const report = await pub.json();
-    expect(report.business).toBe('Great Lakes Plumbing');
-    expect(report.note).toBe('Great meeting you today, Sam.');
-    expect(report.findings.map((f) => f.id)).not.toContain('stale');
-    expect(report.findings.find((f) => f.id === 'gbp-reviews').service).toBe('Reputation management');
-    expect(JSON.stringify(report)).not.toMatch(/evidence|client_id|created_by|share_token/);
-    expect((await SELF.fetch(`https://portal.test/api/public/reports/${token}/shot/mobile`)).status).toBe(200);
-    expect((await SELF.fetch('https://portal.test/api/public/reports/not-a-real-token-but-long-enough-xxxxx')).status).toBe(404);
-
-    // A new link cancels the old one.
-    const rotated = await (await rep.call('POST', `/api/audits/${a.id}/share`, { rotate: true })).json();
-    expect(rotated.shareUrl).not.toContain(token);
-    expect((await SELF.fetch(`https://portal.test/api/public/reports/${token}`)).status).toBe(404);
+    expect(out).toMatchObject({ status: 'not_configured', linkKind: 'invite' });
+    expect(out.manualLink).toContain(`/activate?next=${encodeURIComponent(`/reports/${a.id}`)}#`);
     expect(calls.some((cl) => cl.url.includes('resend'))).toBe(false);
+
+    // Sam sets a password from the link and lands in the portal with the report.
+    const act = await SELF.fetch('https://portal.test/api/auth/activate', { method: 'POST', headers: { Origin: 'https://portal.test', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ link: out.manualLink.split('#')[1], password: 'a long enough password' }) });
+    expect(act.status).toBe(200);
+    const cookie = act.headers.get('Set-Cookie').split(';')[0];
+    const sam = (path) => SELF.fetch(`https://portal.test${path}`, { headers: { Cookie: cookie } });
+    const list = await (await sam('/api/reports')).json();
+    expect(list.reports.map((x) => x.id)).toEqual([a.id]);
+    const report = await sam(`/api/reports/${a.id}`);
+    expect(report.status).toBe(200);
+    expect(report.headers.get('Cache-Control')).toBe('no-store');
+    const r = await report.json();
+    expect(r).toMatchObject({ business: 'Great Lakes Plumbing', note: 'Great meeting you today, Sam.', preview: false });
+    expect(r.findings.map((f) => f.id)).not.toContain('stale');
+    expect(r.findings.find((f) => f.id === 'gbp-reviews').service).toBe('Reputation management');
+    expect(JSON.stringify(r)).not.toMatch(/evidence|created_by|hidden|pagespeedReason/);
+    expect((await sam(`/api/reports/${a.id}/shot/mobile`)).status).toBe(200);
+    // Staff-only screens stay closed to the customer.
+    expect((await sam(`/api/audits/${a.id}`)).status).toBe(403);
+    expect((await sam(`/api/clients/${clientId}/audits`)).status).toBe(403);
+
+    // A newer check isn't visible to the customer until it is sent.
+    const b = await (await rep.call('POST', `/api/clients/${clientId}/audits`, {})).json();
+    expect((await sam(`/api/reports/${b.id}`)).status).toBe(404);
+    expect((await sam(`/api/reports/${b.id}/shot/mobile`)).status).toBe(404);
+    // Now that Sam has a login, sending again links straight to the report.
+    const again = await (await rep.call('POST', `/api/audits/${b.id}/send`, { channel: 'email', name: 'Sam Rivera', email: 'SAM@greatlakesplumbing.com' })).json();
+    expect(again.linkKind).toBe('login');
+    expect(again.manualLink).toMatch(new RegExp(`^https://[^/]+/reports/${b.id}$`));
+    expect((await sam(`/api/reports/${b.id}`)).status).toBe(200);
+
+    // Another business's owner can't open it.
+    const other = await (await admin.call('POST', '/api/clients', { name: 'Other Co', email: 'x@other.com' })).json();
+    const o = await (await admin.call('POST', '/api/users', { role: 'client', email: 'owner@other.com', name: 'Olive', clientId: other.id })).json();
+    const oa = await SELF.fetch('https://portal.test/api/auth/activate', { method: 'POST', headers: { Origin: 'https://portal.test', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ link: o.manualLink.split('#')[1], password: 'a long enough password' }) });
+    const oc = oa.headers.get('Set-Cookie').split(';')[0];
+    expect((await SELF.fetch(`https://portal.test/api/reports/${a.id}`, { headers: { Cookie: oc } })).status).toBe(404);
+    expect((await (await SELF.fetch('https://portal.test/api/reports', { headers: { Cookie: oc } })).json()).reports).toEqual([]);
   });
 
-  it('texts the report only with the customer\'s consent', async () => {
+  it('won\'t attach the report to someone else\'s login', async () => {
+    const { rep, admin, clientId } = await setup();
+    fakeInternet();
+    const a = await (await rep.call('POST', `/api/clients/${clientId}/audits`, {})).json();
+    const res = await rep.call('POST', `/api/audits/${a.id}/send`, { channel: 'email', name: 'Boss', email: admin.email });
+    expect(res.status).toBe(409);
+    expect((await rep.call('POST', `/api/audits/${a.id}/send`, { channel: 'email', name: '', email: 'x@y.com' })).status).toBe(400);
+  });
+
+  it('texts a portal link only with the customer\'s consent', async () => {
     const { rep, clientId } = await setup();
     const calls = fakeInternet();
     const a = await (await rep.call('POST', `/api/clients/${clientId}/audits`, {})).json();
-    expect((await rep.call('POST', `/api/audits/${a.id}/send`, { channel: 'sms', to: '248-555-0177' })).status).toBe(400);
-    expect((await rep.call('POST', `/api/audits/${a.id}/send`, { channel: 'sms', to: '555', consent: true })).status).toBe(400);
-    const res = await rep.call('POST', `/api/audits/${a.id}/send`, { channel: 'sms', to: '(248) 555-0177', consent: true, firstName: 'Sam' });
+    const person = { channel: 'sms', name: 'Sam Rivera', email: `sam-${a.id.slice(0, 6)}@greatlakesplumbing.com` };
+    expect((await rep.call('POST', `/api/audits/${a.id}/send`, { ...person, phone: '248-555-0177' })).status).toBe(400);
+    expect((await rep.call('POST', `/api/audits/${a.id}/send`, { ...person, phone: '555', consent: true })).status).toBe(400);
+    const res = await rep.call('POST', `/api/audits/${a.id}/send`, { ...person, phone: '(248) 555-0177', consent: true });
     expect(res.status).toBe(200);
+    expect((await res.json()).manualLink).toBe(null);
     const twilio = calls.find((cl) => cl.url.endsWith('/Messages.json'));
     const form = new URLSearchParams(twilio.init.body);
     expect(form.get('To')).toBe('+12485550177');
     expect(form.get('MessagingServiceSid')).toBe('MGtest');
-    expect(form.get('Body')).toMatch(/^Hi Sam, here's the website and Google check for Great Lakes Plumbing .*\/r\/[\w-]+ Reply STOP to opt out\.$/);
+    expect(form.get('Body')).toMatch(/^Hi Sam, your website and Google check for Great Lakes Plumbing is ready in your Detcord portal \(score \d+\/100\): https:\/\/[^/]+\/activate\?next=%2Freports%2F[\w-]+#[\w.-]+ Reply STOP to opt out\.$/);
     const detail = await (await rep.call('GET', `/api/audits/${a.id}`)).json();
-    expect(detail.deliveries[0]).toMatchObject({ channel: 'sms', recipient: '+12485550177', status: 'sent', provider_id: 'SM123' });
+    expect(detail.deliveries[0]).toMatchObject({ channel: 'sms', recipient: '+12485550177', status: 'sent', provider_id: 'SM123', link_kind: 'invite' });
+    expect(detail.sharedAt).toBeTruthy();
+    expect(detail.people.find((x) => x.email === person.email).login).toBe('invited');
   });
 
   it('never claims texting works without credentials', async () => {

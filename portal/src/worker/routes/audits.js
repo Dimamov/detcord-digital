@@ -1,7 +1,7 @@
-// Website and local search audits: run, review, and send the customer a no-login report link by email or text.
+// Website and local search audits: run, review, and send the customer an email or text that opens the report in their portal.
 import { Hono } from 'hono';
-import { fail, now, newId, text, oneOf, readJson, logActivity, randomToken, EMAIL_RE } from '../lib/util.js';
-import { requireRole, requireClient } from '../lib/auth.js';
+import { fail, now, newId, text, oneOf, readJson, logActivity, cleanEmail } from '../lib/util.js';
+import { requireRole, requireClient, requireUser, isStaff, issueLink } from '../lib/auth.js';
 import { runAudit, checkTarget, CATEGORIES } from '../lib/audit/index.js';
 import { sendEmail, renderEmail } from '../lib/email.js';
 import { sendSms, toE164, twilioConfig, testTwilio } from '../lib/sms.js';
@@ -12,7 +12,8 @@ import { SERVICES } from '../../shared/services.js';
 const r = new Hono();
 const originOf = (c) => c.env.PUBLIC_URL || new URL(c.req.url).origin;
 const STALE_MS = 5 * 60 * 1000;
-const SHARE_MS = 60 * 24 * 3600 * 1000;
+// A prospect may open the report days after the call, so report invites last longer than team invites.
+const REPORT_INVITE_MS = 7 * 24 * 3600 * 1000;
 const DAILY_LIMIT = 60;
 const serviceName = Object.fromEntries(SERVICES.map((s) => [s.id, s.name]));
 
@@ -32,13 +33,11 @@ async function loadAudit(c, id) {
   return { user, client, audit: await settleStale(c.env.DB, row) };
 }
 
-const shareUrl = (c, a) => (a.share_token && a.share_expires_at > now() ? `${originOf(c)}/r/${a.share_token}` : null);
-
-function staffView(c, a, extra = {}) {
+function staffView(a, extra = {}) {
   return {
     id: a.id, clientId: a.client_id, url: a.url, status: a.status, score: a.score, error: a.error, note: a.note,
     hidden: JSON.parse(a.hidden || '[]'), result: a.result ? JSON.parse(a.result) : null,
-    createdAt: a.created_at, finishedAt: a.finished_at, shareUrl: shareUrl(c, a), shareExpiresAt: a.share_token ? a.share_expires_at : null,
+    createdAt: a.created_at, finishedAt: a.finished_at, sharedAt: a.shared_at,
     categories: CATEGORIES, serviceNames: serviceName, ...extra,
   };
 }
@@ -46,7 +45,7 @@ function staffView(c, a, extra = {}) {
 r.get('/clients/:id/audits', async (c) => {
   const { client } = await requireClient(c, c.req.param('id'), { staffOnly: true });
   const rows = (await c.env.DB.prepare(`SELECT a.id, a.url, a.status, a.score, a.error, a.created_at, a.finished_at, u.name AS by_name,
-      (SELECT COUNT(*) FROM audit_deliveries d WHERE d.audit_id=a.id AND d.status='sent') AS sent
+      a.shared_at
     FROM audits a LEFT JOIN users u ON u.id=a.created_by WHERE a.client_id=? ORDER BY a.created_at DESC LIMIT 50`).bind(client.id).all()).results;
   const settled = [];
   for (const row of rows) settled.push(await settleStale(c.env.DB, row));
@@ -77,26 +76,29 @@ r.post('/clients/:id/audits', async (c) => {
   await work;
   const row = await db.prepare('SELECT * FROM audits WHERE id=?').bind(id).first();
   if (row.status === 'done') await logActivity(db, { clientId: client.id, actorId: user.id, kind: 'audit', summary: `Website check: ${row.score}/100 for ${url}` });
-  return c.json(staffView(c, row), row.status === 'done' ? 201 : 200);
+  return c.json(staffView(row), row.status === 'done' ? 201 : 200);
 });
 
 r.get('/audits/:id', async (c) => {
   const { client, audit } = await loadAudit(c, c.req.param('id'));
   const db = c.env.DB;
-  const [deliveries, contacts] = await Promise.all([
+  const [deliveries, contacts, logins] = await Promise.all([
     db.prepare('SELECT d.*, u.name AS by_name FROM audit_deliveries d LEFT JOIN users u ON u.id=d.sent_by WHERE d.audit_id=? ORDER BY d.created_at DESC').bind(audit.id).all(),
-    db.prepare('SELECT name, email, phone, is_primary FROM contacts WHERE client_id=? ORDER BY is_primary DESC, name').bind(client.id).all(),
+    db.prepare('SELECT name, email, phone FROM contacts WHERE client_id=? ORDER BY is_primary DESC, name').bind(client.id).all(),
+    db.prepare('SELECT u.name, u.email, u.phone, u.status FROM client_members m JOIN users u ON u.id=m.user_id WHERE m.client_id=? ORDER BY u.name').bind(client.id).all(),
   ]);
-  const emails = [];
-  const phones = [];
-  const push = (list, value, label) => { if (value && !list.some((x) => x.value === value)) list.push({ value, label }); };
-  for (const ct of contacts.results) { push(emails, ct.email, ct.name); push(phones, ct.phone, ct.name); }
-  push(emails, client.email, client.name);
-  push(phones, client.phone, `${client.name} (business line)`);
-  return c.json(staffView(c, audit, {
+  // People who could receive the report, with whether they already have a portal login.
+  const people = [];
+  for (const p of [...logins.results.map((l) => ({ ...l, login: l.status })), ...contacts.results]) {
+    const same = people.find((x) => (p.email && x.email === p.email) || (!p.email && x.name === p.name));
+    if (same) { same.phone ||= p.phone; same.login ||= p.login; continue; }
+    people.push({ name: p.name, email: p.email || '', phone: p.phone || '', login: p.login || null });
+  }
+  if (!people.length) people.push({ name: '', email: client.email || '', phone: client.phone || '', login: null });
+  return c.json(staffView(audit, {
     client: { id: client.id, name: client.name, city: client.city },
     deliveries: deliveries.results,
-    recipients: { emails, phones },
+    people,
     channels: { email: !!c.env.RESEND_API_KEY, sms: twilioConfig(c.env).ready },
   }));
 });
@@ -127,100 +129,112 @@ r.delete('/audits/:id', async (c) => {
   return c.json({ ok: true });
 });
 
-async function ensureShare(c, audit, { rotate = false } = {}) {
-  if (!rotate && audit.share_token && audit.share_expires_at > now()) return audit;
-  const token = randomToken();
-  const expires = now() + SHARE_MS;
-  await c.env.DB.prepare('UPDATE audits SET share_token=?, share_expires_at=? WHERE id=?').bind(token, expires, audit.id).run();
-  return { ...audit, share_token: token, share_expires_at: expires };
+// Finds or creates the customer's portal login and returns the link that opens the report:
+// a password-setup invite for new or not-yet-activated logins, or the report page for active ones.
+async function portalLink(c, client, auditId, { name, email, phone }) {
+  const db = c.env.DB;
+  let user = await db.prepare('SELECT * FROM users WHERE email=?').bind(email).first();
+  if (user) {
+    const member = user.role === 'client' && await db.prepare('SELECT 1 FROM client_members WHERE client_id=? AND user_id=?').bind(client.id, user.id).first();
+    if (!member) fail(409, 'That email already has a portal login for a different account. Use another email.');
+    if (user.status === 'disabled') fail(409, 'That person\'s portal login is turned off. An admin can turn it back on under Portal access.');
+  } else {
+    user = { id: newId(), email, name, role: 'client', status: 'invited' };
+    await db.batch([
+      db.prepare("INSERT INTO users (id, email, name, role, status, phone, created_at) VALUES (?,?,?,'client','invited',?,?)").bind(user.id, email, name, phone || null, now()),
+      db.prepare('INSERT INTO client_members (client_id, user_id) VALUES (?,?)').bind(client.id, user.id),
+    ]);
+    await logActivity(db, { clientId: client.id, actorId: requireUser(c).id, kind: 'invite', summary: `Created a portal login for ${name} to view a website check` });
+  }
+  const next = `/reports/${auditId}`;
+  if (user.status === 'active') return { user, kind: 'login', url: `${originOf(c)}${next}` };
+  const link = await issueLink(c, user, 'invite', { notify: false, ttlMs: REPORT_INVITE_MS, next });
+  return { user, kind: 'invite', url: link.url };
 }
 
-// Creates (or with rotate: replaces) the customer's report link. Rotating breaks every link sent before.
-r.post('/audits/:id/share', async (c) => {
-  const { audit } = await loadAudit(c, c.req.param('id'));
-  if (audit.status !== 'done') fail(409, 'The check has not finished.');
-  const body = await readJson(c);
-  const a = await ensureShare(c, audit, { rotate: body.rotate === true });
-  return c.json({ shareUrl: shareUrl(c, a), shareExpiresAt: a.share_expires_at });
-});
-
+// One send = one message to one person, pointing at the report inside their portal.
 r.post('/audits/:id/send', async (c) => {
   const { user, client, audit } = await loadAudit(c, c.req.param('id'));
   if (audit.status !== 'done') fail(409, 'The check has not finished.');
   const body = await readJson(c);
   const channel = oneOf(body.channel, ['email', 'sms'], 'Channel');
-  const a = await ensureShare(c, audit);
-  const link = shareUrl(c, a);
-  const result = JSON.parse(a.result);
-  const firstName = text(body.firstName, { max: 40 });
-  let recipient;
+  const name = text(body.name, { max: 120, required: true, label: 'Name' });
+  const email = cleanEmail(body.email);
+  let to = email;
+  if (channel === 'sms') {
+    // Texting a customer requires their permission (TCPA). Staff confirm it for every send.
+    to = toE164(body.phone);
+    if (!to) fail(400, 'Enter a valid US mobile number.');
+    if (body.consent !== true) fail(400, 'Confirm the customer agreed to receive this by text.');
+  }
+  const link = await portalLink(c, client, audit.id, { name, email, phone: channel === 'sms' ? to : text(body.phone, { max: 40 }) });
+  if (!audit.shared_at) await c.env.DB.prepare('UPDATE audits SET shared_at=? WHERE id=?').bind(now(), audit.id).run();
+  const result = JSON.parse(audit.result);
+  const first = name.split(/\s+/)[0];
+  const invite = link.kind === 'invite';
   let sent;
   if (channel === 'email') {
-    recipient = String(body.to || '').trim().toLowerCase();
-    if (!EMAIL_RE.test(recipient)) fail(400, 'Enter a valid email address.');
-    const visible = result.findings.filter((f) => !JSON.parse(a.hidden || '[]').includes(f.id));
+    const visible = result.findings.filter((f) => !JSON.parse(audit.hidden || '[]').includes(f.id));
     const top = visible.filter((f) => f.severity !== 'minor').slice(0, 3);
     const mail = renderEmail({
       origin: originOf(c),
       heading: `Your website check: ${result.overall}/100`,
       paragraphs: [
-        `${firstName ? `Hi ${firstName}, w` : 'W'}e ran a full check of ${client.name}'s website and Google presence: search visibility, local search, mobile experience, speed and security.`,
-        ...(a.note ? [a.note] : []),
+        `Hi ${first}, we ran a full check of ${client.name}'s website and Google presence: search visibility, local search, mobile experience, speed and security.`,
+        ...(audit.note ? [audit.note] : []),
         top.length ? `The biggest opportunities we found: ${top.map((f) => f.title.replace(/\.$/, '')).join('; ')}.` : 'Your site is in good shape. The report lists a few smaller improvements.',
-        'The full report explains each issue in plain English, why it matters and how to fix it.',
+        invite ? 'Your report is waiting in your Detcord portal. Create a password to open it; you can sign in any time after that to see it again.' : 'Your report is in your Detcord portal. Sign in to see it.',
       ],
-      button: { label: 'View your report', url: link },
-      footnote: 'Questions? Just reply to this email. This link works for 60 days.',
+      button: { label: invite ? 'Open my report' : 'View my report', url: link.url },
+      footnote: invite ? `This setup link works once and expires in 7 days. After that, sign in at ${originOf(c)}. Questions? Just reply to this email.` : 'Questions? Just reply to this email.',
     });
-    sent = await sendEmail(c.env, { to: recipient, subject: `${client.name}: your website and Google check (${result.overall}/100)`, ...mail, idempotencyKey: `audit/${a.id}/${recipient}/${Math.floor(now() / 60000)}` });
+    sent = await sendEmail(c.env, { to: email, subject: `${client.name}: your website and Google check (${result.overall}/100)`, ...mail, idempotencyKey: `audit/${audit.id}/${email}/${Math.floor(now() / 60000)}` });
   } else {
-    // Texting a customer requires their permission (TCPA). Staff confirm it for every send.
-    if (body.consent !== true) fail(400, 'Confirm the customer agreed to receive this by text.');
-    recipient = toE164(body.to);
-    if (!recipient) fail(400, 'Enter a valid US mobile number.');
-    const msg = `${firstName ? `Hi ${firstName}, h` : 'H'}ere's the website and Google check for ${client.name} from Detcord Digital (score ${result.overall}/100): ${link} Reply STOP to opt out.`;
-    sent = await sendSms(c.env, { to: recipient, body: msg });
+    const msg = `Hi ${first}, your website and Google check for ${client.name} is ready in your Detcord portal (score ${result.overall}/100): ${link.url} Reply STOP to opt out.`;
+    sent = await sendSms(c.env, { to, body: msg });
   }
-  await c.env.DB.prepare('INSERT INTO audit_deliveries (id, audit_id, channel, recipient, status, error, provider_id, sent_by, created_at) VALUES (?,?,?,?,?,?,?,?,?)')
-    .bind(newId(), a.id, channel, recipient, sent.status, sent.error || null, sent.id || null, user.id, now()).run();
+  await c.env.DB.prepare('INSERT INTO audit_deliveries (id, audit_id, channel, recipient, user_id, link_kind, status, error, provider_id, sent_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
+    .bind(newId(), audit.id, channel, to, link.user.id, link.kind, sent.status, sent.error || null, sent.id || null, user.id, now()).run();
   if (sent.status === 'sent') {
-    await logActivity(c.env.DB, { clientId: client.id, actorId: user.id, kind: 'audit_sent', summary: `Website check sent by ${channel === 'sms' ? 'text' : 'email'} to ${recipient}` });
+    await logActivity(c.env.DB, { clientId: client.id, actorId: user.id, kind: 'audit_sent', summary: `Website check sent by ${channel === 'sms' ? 'text' : 'email'} to ${name} (${to})` });
     if (channel === 'sms') await putSetting(c.env.DB, 'integration.twilio.lastSend', { ok: true, at: now() }, user.id);
   }
-  return c.json({ status: sent.status, error: sent.error || null, shareUrl: link }, sent.status === 'sent' ? 200 : sent.status === 'not_configured' ? 503 : 502);
+  return c.json({
+    status: sent.status, error: sent.error || null, linkKind: link.kind,
+    // When nothing was delivered, staff get the link to pass on themselves, as with team invites.
+    manualLink: sent.status === 'sent' ? null : link.url,
+  }, sent.status === 'sent' ? 200 : sent.status === 'not_configured' ? 503 : 502);
 });
 
-async function shot(c, auditId, name) {
-  if (!['mobile', 'desktop'].includes(name) || !c.env.MEDIA) fail(404, 'Not found.');
-  const obj = await c.env.MEDIA.get(`audits/${auditId}/${name}`);
-  if (!obj) fail(404, 'Not found.');
-  return new Response(obj.body, { headers: { 'Content-Type': obj.httpMetadata?.contentType || 'image/jpeg', 'Cache-Control': 'private, no-store', 'Content-Security-Policy': "default-src 'none'; sandbox" } });
+// ---------- The report as the customer sees it (their portal; staff can preview) ----------
+async function loadReport(c) {
+  const user = requireUser(c);
+  const a = await c.env.DB.prepare("SELECT * FROM audits WHERE id=? AND status='done'").bind(c.req.param('id')).first();
+  if (!a) fail(404, 'Report not found.');
+  const { client } = await requireClient(c, a.client_id);
+  // Customers only see checks that were sent to them; the same 404 as a missing report.
+  if (!isStaff(user) && !a.shared_at) fail(404, 'Report not found.');
+  return { user, client, a };
 }
 
-r.get('/audits/:id/shot/:name', async (c) => {
-  const { audit } = await loadAudit(c, c.req.param('id'));
-  return shot(c, audit.id, c.req.param('name'));
+r.get('/reports', async (c) => {
+  const user = requireUser(c);
+  const rows = (await c.env.DB.prepare(`SELECT a.id, a.url, a.score, a.shared_at, cl.name AS business FROM audits a JOIN clients cl ON cl.id=a.client_id
+    WHERE a.status='done' AND a.shared_at IS NOT NULL AND a.client_id IN (SELECT client_id FROM client_members WHERE user_id=?) ORDER BY a.shared_at DESC LIMIT 20`).bind(user.id).all()).results;
+  return c.json({ reports: rows });
 });
 
-// ---------- Customer's no-login report ----------
-async function byToken(c) {
-  const token = c.req.param('token');
-  if (!/^[A-Za-z0-9_-]{30,64}$/.test(token)) fail(404, 'This report link is not valid.');
-  const a = await c.env.DB.prepare("SELECT * FROM audits WHERE share_token=? AND status='done'").bind(token).first();
-  if (!a || a.share_expires_at < now()) fail(404, 'This report link has expired or is not valid. Ask us for a new one.');
-  return a;
-}
-
-r.get('/public/reports/:token', async (c) => {
-  const a = await byToken(c);
-  const client = await c.env.DB.prepare('SELECT name, city, state FROM clients WHERE id=?').bind(a.client_id).first();
+r.get('/reports/:id', async (c) => {
+  const { user, client, a } = await loadReport(c);
   const company = await getSettings(c.env.DB, 'company.');
   const res = JSON.parse(a.result);
   const hidden = new Set(JSON.parse(a.hidden || '[]'));
   const findings = res.findings.filter((f) => !hidden.has(f.id)).map(({ id, cat, severity, title, detail, why, fix, service }) => ({ id, cat, severity, title, detail, why, fix, service: serviceName[service] || null }));
   return c.json({
-    business: client?.name || 'Your business',
-    city: client?.city || null,
+    id: a.id,
+    preview: isStaff(user),
+    clientId: client.id,
+    business: client.name,
     url: res.url,
     checkedAt: res.checkedAt,
     overall: res.overall,
@@ -228,22 +242,25 @@ r.get('/public/reports/:token', async (c) => {
     scores: res.scores,
     categories: CATEGORIES,
     findings,
-    counts: { critical: findings.filter((f) => f.severity === 'critical').length, important: findings.filter((f) => f.severity === 'important').length, minor: findings.filter((f) => f.severity === 'minor').length },
     passed: res.passed,
     speed: res.speed,
     google: res.google ? { profile: res.google.profile && { name: res.google.profile.name, rating: res.google.profile.rating, reviews: res.google.profile.reviews, mapsUrl: res.google.profile.mapsUrl, photos: res.google.profile.photos, hours: !!res.google.profile.hours }, competitors: res.google.competitors } : null,
     coverage: { pagespeed: res.coverage.pagespeed, google: res.coverage.google },
     pagesChecked: res.pagesChecked,
+    facts: res.facts ? { linksChecked: res.facts.linksChecked } : null,
     note: a.note,
     shots: res.shots || {},
     contact: { email: company.email || 'info@detcorddigital.com', phone: company.phone || null },
-    expiresAt: a.share_expires_at,
   });
 });
 
-r.get('/public/reports/:token/shot/:name', async (c) => {
-  const a = await byToken(c);
-  return shot(c, a.id, c.req.param('name'));
+r.get('/reports/:id/shot/:name', async (c) => {
+  const { a } = await loadReport(c);
+  const name = c.req.param('name');
+  if (!['mobile', 'desktop'].includes(name) || !c.env.MEDIA) fail(404, 'Not found.');
+  const obj = await c.env.MEDIA.get(`audits/${a.id}/${name}`);
+  if (!obj) fail(404, 'Not found.');
+  return new Response(obj.body, { headers: { 'Content-Type': obj.httpMetadata?.contentType || 'image/jpeg', 'Cache-Control': 'private, no-store', 'Content-Security-Policy': "default-src 'none'; sandbox" } });
 });
 
 // ---------- Integration tests (admin) ----------

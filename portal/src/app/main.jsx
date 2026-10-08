@@ -13,7 +13,7 @@ import { Account } from './pages/account.jsx';
 import { ContractPage } from './pages/contracts.jsx';
 import { InvoicesPage, InvoicePage } from './pages/billing.jsx';
 import { FilesPage } from './pages/files.jsx';
-import { AuditPage, PublicReport } from './pages/audits.jsx';
+import { AuditPage, ReportPage } from './pages/audits.jsx';
 
 const PUBLIC = [
   ['/login', Login],
@@ -21,7 +21,6 @@ const PUBLIC = [
   ['/activate', () => <SetPassword kind="invite" />],
   ['/reset', () => <SetPassword kind="reset" />],
   ['/intake', Intake],
-  ['/r/:token', PublicReport],
 ];
 
 const PRIVATE = [
@@ -42,6 +41,7 @@ const PRIVATE = [
   ['/invoices/:id', InvoicePage, ['admin', 'rep', 'client']],
   ['/files', FilesPage, ['client']],
   ['/audits/:id', AuditPage, ['admin', 'rep']],
+  ['/reports/:id', ReportPage, ['admin', 'rep', 'client']],
 ];
 
 const NAV = {

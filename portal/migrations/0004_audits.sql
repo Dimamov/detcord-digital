@@ -9,8 +9,7 @@ CREATE TABLE audits (
   result TEXT,                      -- JSON: scores, findings, passed checks, coverage, Google profile, competitors
   hidden TEXT NOT NULL DEFAULT '[]',-- JSON array of finding ids staff removed from the customer's report
   note TEXT,                        -- personal note shown at the top of the customer's report
-  share_token TEXT UNIQUE,          -- capability for the customer's no-login report link
-  share_expires_at INTEGER,
+  shared_at INTEGER,                -- first sent to the customer; only shared checks appear in their portal
   error TEXT,
   created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
   created_at INTEGER NOT NULL,
@@ -23,6 +22,8 @@ CREATE TABLE audit_deliveries (
   audit_id TEXT NOT NULL REFERENCES audits(id) ON DELETE CASCADE,
   channel TEXT NOT NULL CHECK (channel IN ('email','sms')),
   recipient TEXT NOT NULL,
+  user_id TEXT REFERENCES users(id) ON DELETE SET NULL, -- the customer's portal login the message pointed to
+  link_kind TEXT NOT NULL CHECK (link_kind IN ('invite','login')),
   status TEXT NOT NULL,             -- sent | failed | not_configured
   error TEXT,
   provider_id TEXT,

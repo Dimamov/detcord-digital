@@ -1,6 +1,7 @@
 import { useLoad, date, money } from '../lib.js';
 import { Loading, ErrorBox, Empty, Avatar, Icon } from '../ui.jsx';
 import { session } from '../lib.js';
+import { ReportsCard } from './audits.jsx';
 
 // The client workspace: what needs them (agreements to sign, invoices due), updates, services,
 // files and their Detcord team. GOAT Command and reports arrive in later phases and are
@@ -28,6 +29,9 @@ function BusinessView({ id, user, others }) {
         </div>
       </div>
 
+      <ActionItems />
+      <ReportsCard />
+
       <section class="card mb" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
         <img src="/goat-96.webp" alt="" style="width:64px;height:64px;border-radius:50%" />
         <div style="flex:1;min-width:220px">
@@ -37,7 +41,6 @@ function BusinessView({ id, user, others }) {
         <span class="badge">Coming soon</span>
       </section>
 
-      <ActionItems />
 
       <div class="grid main-side">
         <div class="stack">
@@ -62,10 +65,6 @@ function BusinessView({ id, user, others }) {
           <section class="card">
             <div class="row between"><h2 style="margin:0">Files and photos</h2><a class="btn sm secondary" href="/files"><Icon name="upload" />Share files</a></div>
             <p class="small muted" style="margin-bottom:0">Send logos, photos and flyers for your website, social posts and requests. Your Detcord team sees them right away.</p>
-          </section>
-          <section class="card" style="border-style:dashed">
-            <strong>Reports</strong> <span class="badge">Coming soon</span>
-            <div class="small muted">Plain-English results with a game plan.</div>
           </section>
         </div>
         <div class="stack">

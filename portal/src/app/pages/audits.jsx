@@ -96,7 +96,8 @@ export function AuditsTab({ client, user, onChanged }) {
 // ---------- Staff audit page ----------
 export function AuditPage({ id, user }) {
   const { loading, data, error, reload } = useLoad(`/audits/${id}`);
-  const [sending, setSending] = useState(false);
+  const [sending, setSending] = useState(null);
+  const [manual, setManual] = useState(null);
   const [note, setNote] = useState(null);
   const { run, busy } = useAction();
   if (loading) return <div class="page"><Loading /></div>;
@@ -110,14 +111,9 @@ export function AuditPage({ id, user }) {
   });
   const saveNote = () => run(async () => { await api('PATCH', `/audits/${a.id}`, { note }); setNote(null); toast('Note saved.'); await reload(); });
   const remove = () => run(async () => {
-    if (!confirm('Delete this check? Links already sent to the customer stop working.')) return;
+    if (!confirm('Delete this check? It also disappears from the customer\'s portal.')) return;
     await api('DELETE', `/audits/${a.id}`);
     navigate(`/clients/${a.clientId}?tab=audits`);
-  });
-  const preview = () => run(async () => {
-    const r = a.shareUrl ? { shareUrl: a.shareUrl } : await api('POST', `/audits/${a.id}/share`, {});
-    window.open(r.shareUrl, '_blank', 'noopener');
-    if (!a.shareUrl) reload();
   });
 
   return (
@@ -130,17 +126,24 @@ export function AuditPage({ id, user }) {
         </div>
         {a.status === 'done' && (
           <div class="row wrap">
-            <button class="btn secondary" onClick={preview} disabled={busy}><Icon name="eye" />Customer view</button>
-            <button class="btn" onClick={() => setSending(true)}><Icon name="mail" />Send to customer</button>
+            <a class="btn ghost" href={`/reports/${a.id}`}><Icon name="eye" />Customer view</a>
+            <button class="btn secondary" onClick={() => setSending('sms')}><Icon name="phone" />Text</button>
+            <button class="btn" onClick={() => setSending('email')}><Icon name="mail" />Email</button>
           </div>
         )}
       </div>
       {a.status === 'failed' && <div class="alert bad">{a.error}</div>}
       {a.status === 'running' && <div class="alert">This check is still running. Refresh in a moment.</div>}
+      {manual && (
+        <div class="alert warn mb">
+          <strong>{manual.channel === 'sms' ? 'Texting' : 'Email'} isn't connected yet, so nothing was sent.</strong> The report is in {manual.name}'s portal. Send them this {manual.kind === 'invite' ? 'one-time setup link (valid 7 days)' : 'link'} yourself:
+          <div class="row mt"><code class="small" style="word-break:break-all">{manual.link}</code><CopyButton text={manual.link} /></div>
+        </div>
+      )}
       {a.status === 'done' && (
         <div class="grid main-side">
           <div>
-            <Report r={a.result} business={a.client.name} categories={a.categories} serviceNames={a.serviceNames} hidden={hidden} onToggle={toggle} staff shotBase={`/api/audits/${a.id}/shot`} />
+            <Report r={a.result} business={a.client.name} categories={a.categories} serviceNames={a.serviceNames} hidden={hidden} onToggle={toggle} staff shotBase={`/api/reports/${a.id}/shot`} />
           </div>
           <aside class="stack">
             <div class="card">
@@ -150,13 +153,8 @@ export function AuditPage({ id, user }) {
               {note !== null && <div class="row mt"><button class="btn sm" onClick={saveNote} disabled={busy}>Save note</button><button class="btn sm ghost" onClick={() => setNote(null)}>Cancel</button></div>}
             </div>
             <div class="card">
-              <h3>Customer link</h3>
-              {a.shareUrl ? (
-                <div class="stack" style="gap:8px">
-                  <div class="faint small">No login needed. Expires {date(a.shareExpiresAt)}.</div>
-                  <div class="row wrap"><CopyButton text={a.shareUrl} /><button class="btn sm ghost" disabled={busy} onClick={() => run(async () => { if (!confirm('Make a new link? Links already sent stop working.')) return; await api('POST', `/audits/${a.id}/share`, { rotate: true }); reload(); })}>New link</button></div>
-                </div>
-              ) : <div class="faint small">Created when you first send or preview the report.</div>}
+              <h3>In the customer's portal</h3>
+              <div class="faint small">{a.sharedAt ? `Visible to ${a.client.name}'s portal logins since ${date(a.sharedAt)}.` : 'Not yet. It appears in their portal when you first email or text it.'}</div>
               {hidden.size > 0 && <div class="alert mt small">{hidden.size} finding{hidden.size === 1 ? ' is' : 's are'} hidden from the customer.</div>}
             </div>
             <div class="card">
@@ -165,8 +163,8 @@ export function AuditPage({ id, user }) {
                 <div class="stack" style="gap:8px">
                   {a.deliveries.map((d) => (
                     <div class="small">
-                      <div class="row between"><span><Icon name={d.channel === 'sms' ? 'phone' : 'mail'} size={14} /> {d.recipient}</span><span class={`badge ${d.status === 'sent' ? 'good' : 'bad'}`}>{d.status === 'sent' ? 'Sent' : d.status === 'not_configured' ? 'Not set up' : 'Failed'}</span></div>
-                      <div class="faint">{ago(d.created_at)}{d.by_name ? ` · ${d.by_name}` : ''}{d.error ? ` · ${d.error}` : ''}</div>
+                      <div class="row between"><span><Icon name={d.channel === 'sms' ? 'phone' : 'mail'} size={14} /> {d.recipient}</span><span class={`badge ${d.status === 'sent' ? 'good' : 'bad'}`}>{d.status === 'sent' ? 'Sent' : d.status === 'not_configured' ? 'Not sent' : 'Failed'}</span></div>
+                      <div class="faint">{ago(d.created_at)}{d.by_name ? ` · ${d.by_name}` : ''} · {d.link_kind === 'invite' ? 'password setup link' : 'sign-in link'}{d.error ? ` · ${d.error}` : ''}</div>
                     </div>
                   ))}
                 </div>
@@ -176,103 +174,102 @@ export function AuditPage({ id, user }) {
           </aside>
         </div>
       )}
-      {sending && <SendDialog audit={a} onClose={() => setSending(false)} onSent={() => { setSending(false); reload(); }} />}
+      {sending && <SendDialog audit={a} channel={sending} onClose={() => setSending(null)} onDone={(m) => { setSending(null); setManual(m); reload(); }} />}
     </div>
   );
 }
 
-function SendDialog({ audit, onClose, onSent }) {
-  const [channel, setChannel] = useState(audit.channels.email || !audit.channels.sms ? 'email' : 'sms');
-  const emails = audit.recipients.emails;
-  const phones = audit.recipients.phones;
-  const firstOf = (label) => (label || '').split(/\s+/)[0];
-  const [to, setTo] = useState({ email: emails[0]?.value || '', sms: phones[0]?.value || '' });
-  const [firstName, setFirstName] = useState(firstOf(emails[0]?.label || phones[0]?.label) === audit.client.name.split(/\s+/)[0] ? '' : firstOf(emails[0]?.label || phones[0]?.label));
+// Email or text one person. They get a link into their portal: a password setup link the first time, a sign-in link after.
+function SendDialog({ audit, channel, onClose, onDone }) {
+  const people = audit.people;
+  const [pick, setPick] = useState(0);
+  const [p, setP] = useState(people[0]);
   const [consent, setConsent] = useState(false);
   const { busy, error, run } = useAction();
-  const configured = audit.channels[channel];
+  const sms = channel === 'sms';
+  const choose = (i) => { setPick(i); setP(people[i]); };
   const send = () => run(async () => {
     try {
-      await api('POST', `/audits/${audit.id}/send`, { channel, to: to[channel], firstName, consent });
-      toast(channel === 'sms' ? 'Report texted.' : 'Report emailed.');
-      onSent();
+      const r = await api('POST', `/audits/${audit.id}/send`, { channel, name: p.name, email: p.email, phone: p.phone, consent });
+      toast(sms ? `Texted ${p.name.split(' ')[0]} a link to the report.` : `Emailed ${p.name.split(' ')[0]} a link to the report.`);
+      onDone(null);
+      return r;
     } catch (e) {
-      if (e.data?.status === 'not_configured') {
-        toast(`${channel === 'sms' ? 'Texting' : 'Email'} isn't set up yet. Copy the link and send it yourself.`, 'warn');
-        onSent();
-        return;
-      }
+      if (e.data?.manualLink) { onDone({ channel, name: p.name, kind: e.data.linkKind, link: e.data.manualLink }); return; }
       throw e;
     }
   });
-  const list = channel === 'email' ? emails : phones;
+  const ready = p.name && p.email && (!sms || (p.phone && consent));
   return (
-    <Dialog title="Send the report" onClose={onClose} footer={<><button class="btn ghost" onClick={onClose}>Cancel</button><button class="btn" disabled={busy || !to[channel] || (channel === 'sms' && !consent)} onClick={send}>{busy ? 'Sending…' : channel === 'sms' ? 'Send text' : 'Send email'}</button></>}>
+    <Dialog title={sms ? 'Text the report' : 'Email the report'} onClose={onClose} footer={<><button class="btn ghost" onClick={onClose}>Cancel</button><button class="btn" disabled={busy || !ready} onClick={send}>{busy ? 'Sending…' : sms ? 'Send text' : 'Send email'}</button></>}>
       <div class="stack">
-        <div class="seg" role="tablist">
-          <button role="tab" aria-selected={channel === 'email'} onClick={() => setChannel('email')}><Icon name="mail" size={14} />Email</button>
-          <button role="tab" aria-selected={channel === 'sms'} onClick={() => setChannel('sms')}><Icon name="phone" size={14} />Text message</button>
-        </div>
-        {!configured && <div class="alert warn small">{channel === 'sms' ? 'Texting isn\'t connected yet (Twilio).' : 'Email sending isn\'t connected yet.'} You can still create the link and send it yourself.</div>}
-        <Field label={channel === 'email' ? 'Email address' : 'Mobile number'}>
-          <input class="input" type={channel === 'email' ? 'email' : 'tel'} list={`rcpt-${channel}`} value={to[channel]} onInput={(e) => setTo({ ...to, [channel]: e.target.value })} />
-          <datalist id={`rcpt-${channel}`}>{list.map((x) => <option value={x.value}>{x.label}</option>)}</datalist>
-        </Field>
-        {list.length > 1 && <div class="chips">{list.map((x) => <button type="button" class="chip" aria-pressed={to[channel] === x.value} onClick={() => { setTo({ ...to, [channel]: x.value }); }}>{x.label}</button>)}</div>}
-        <Field label="First name" help="optional, for the greeting"><input class="input" value={firstName} onInput={(e) => setFirstName(e.target.value)} /></Field>
-        {channel === 'sms' && (
-          <label class="check"><input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />The customer agreed to get this report by text.</label>
-        )}
-        <div class="faint small">{channel === 'sms'
-          ? `They'll get: "${firstName ? `Hi ${firstName}, h` : 'H'}ere's the website and Google check for ${audit.client.name} from Detcord Digital (score ${audit.result.overall}/100): <link> Reply STOP to opt out."`
-          : 'They\'ll get a short email with the score, the top issues, your note, and a button to the full report. Replies go to info@detcorddigital.com.'}</div>
+        {!audit.channels[channel] && <div class="alert warn small">{sms ? 'Texting (Twilio) isn\'t connected yet.' : 'Email sending isn\'t connected yet.'} The report still goes into their portal, and you'll get the link to send yourself.</div>}
+        {people.length > 1 && <div class="chips">{people.map((x, i) => <button type="button" class="chip" aria-pressed={pick === i} onClick={() => choose(i)}>{x.name || x.email}</button>)}</div>}
+        <Field label="Name"><input class="input" value={p.name} onInput={(e) => setP({ ...p, name: e.target.value })} /></Field>
+        <Field label="Email" help={sms ? 'for their portal login' : undefined}><input class="input" type="email" value={p.email} onInput={(e) => setP({ ...p, email: e.target.value, login: null })} /></Field>
+        {sms && <Field label="Mobile number"><input class="input" type="tel" value={p.phone} onInput={(e) => setP({ ...p, phone: e.target.value })} /></Field>}
+        {sms && <label class="check"><input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />{p.name ? p.name.split(' ')[0] : 'The customer'} agreed to get this by text.</label>}
+        <div class="faint small">{p.login === 'active'
+          ? `${p.name.split(' ')[0]} already has a portal login, so the link opens the report after they sign in.`
+          : 'This creates their portal login. The link lets them set a password and opens the report. It works once and lasts 7 days.'}</div>
+        {sms && <div class="faint small">They'll get: "Hi {p.name.split(' ')[0] || '…'}, your website and Google check for {audit.client.name} is ready in your Detcord portal (score {audit.result.overall}/100): &lt;link&gt; Reply STOP to opt out."</div>}
         {error && <div class="alert bad">{error}</div>}
       </div>
     </Dialog>
   );
 }
 
-// ---------- Customer report (no login) ----------
-export function PublicReport({ token }) {
-  const [state, setState] = useState({ loading: true });
-  useEffect(() => {
-    document.title = 'Your website check · Detcord Digital';
-    const meta = document.createElement('meta');
-    meta.name = 'robots';
-    meta.content = 'noindex, nofollow';
-    document.head.appendChild(meta);
-    fetch(`/api/public/reports/${encodeURIComponent(token)}`, { credentials: 'omit' })
-      .then(async (res) => { const d = await res.json().catch(() => ({})); setState(res.ok ? { data: d } : { error: d.error || 'This report could not be loaded.' }); })
-      .catch(() => setState({ error: 'Can’t reach the server. Check your connection and try again.' }));
-  }, [token]);
-  if (state.loading) return <Loading />;
-  if (state.error) return <div class="public-report"><div class="report-top"><img src="/detcord-logo-transparent.webp" alt="Detcord Digital" /></div><div class="alert bad" style="max-width:560px;margin:40px auto">{state.error}</div></div>;
-  const d = state.data;
+// ---------- The report in the customer's portal (staff see the same page as a preview) ----------
+export function ReportPage({ id, user }) {
+  const { loading, data: d, error, reload } = useLoad(`/reports/${id}`);
+  if (loading) return <div class="page"><Loading /></div>;
+  if (error) return <div class="page"><ErrorBox error={error} retry={reload} /></div>;
   const mailto = `mailto:${d.contact.email}?subject=${encodeURIComponent(`Website check for ${d.business}`)}`;
   return (
-    <div class="public-report">
-      <div class="report-top">
-        <img src="/detcord-logo-transparent.webp" alt="Detcord Digital" />
-        <div class="row no-print"><button class="btn sm secondary" onClick={() => print()}><Icon name="download" size={14} />Save as PDF</button></div>
-      </div>
-      <div class="report-wrap">
-        <p class="eyebrow">Website and Google check</p>
-        <h1 style="margin:4px 0 2px">{d.business}</h1>
-        <p class="muted">{d.url.replace(/^https?:\/\//, '').replace(/\/$/, '')} · checked {date(d.checkedAt)}</p>
-        {d.note && <div class="report-note">{d.note}</div>}
-        <Report r={d} business={d.business} categories={d.categories} shotBase={`/api/public/reports/${encodeURIComponent(token)}/shot`} />
-        <div class="report-cta">
-          <h2>Want these fixed?</h2>
-          <p>Detcord Digital fixes everything in this report and keeps it fixed, so more of the people searching for you become calls.</p>
-          <div class="row wrap" style="justify-content:center">
-            <a class="btn" href={mailto}><Icon name="bolt" />LIGHT THE FUSE</a>
-            {d.contact.phone && <a class="btn secondary" href={`tel:${d.contact.phone}`}><Icon name="phone" />{d.contact.phone}</a>}
-          </div>
-          <p class="faint small">{d.contact.email}</p>
+    <div class="page report-page" style="max-width:860px">
+      {d.preview && <div class="alert info mb no-print row between"><span>Preview: this is what {d.business} sees in their portal.</span><a class="btn sm secondary" href={`/audits/${d.id}`}>Back to the check</a></div>}
+      <div class="page-head">
+        <div>
+          <div class="eyebrow">Website and Google check</div>
+          <h1>{d.business}</h1>
+          <p class="sub">{d.url.replace(/^https?:\/\//, '').replace(/\/$/, '')} · checked {date(d.checkedAt)}</p>
         </div>
-        <p class="faint small center">This report link expires {date(d.expiresAt)}. Results reflect the site and Google listing at the time of the check.</p>
+        <button class="btn secondary no-print" onClick={() => print()}><Icon name="download" />Save as PDF</button>
       </div>
+      {d.note && <div class="report-note">{d.note}</div>}
+      <Report r={d} business={d.business} categories={d.categories} shotBase={`/api/reports/${d.id}/shot`} />
+      <div class="report-cta">
+        <h2>Want these fixed?</h2>
+        <p>Detcord Digital fixes everything in this report and keeps it fixed, so more of the people searching for you become calls.</p>
+        <div class="row wrap" style="justify-content:center">
+          <a class="btn" href={mailto}><Icon name="bolt" />LIGHT THE FUSE</a>
+          {d.contact.phone && <a class="btn secondary" href={`tel:${d.contact.phone}`}><Icon name="phone" />{d.contact.phone}</a>}
+        </div>
+        <p class="faint small">{d.contact.email}</p>
+      </div>
+      <p class="faint small center">Results reflect the website and Google listing on {date(d.checkedAt)}.</p>
     </div>
+  );
+}
+
+// Client home card: every check Detcord has shared with this business.
+export function ReportsCard() {
+  const { data } = useLoad('/reports');
+  const reports = data?.reports || [];
+  if (!reports.length) return null;
+  return (
+    <section class="card mb attention">
+      <h2>Your website reports</h2>
+      <div class="list">
+        {reports.map((r) => (
+          <a class="list-item" href={`/reports/${r.id}`}>
+            <span class={`score-pill ${tone(r.score)}`}>{r.score}</span>
+            <div style="flex:1;min-width:0"><div class="title truncate">Website and Google check</div><div class="meta truncate">{r.url.replace(/^https?:\/\//, '').replace(/\/$/, '')} · {date(r.shared_at)}</div></div>
+            <span class="btn sm">View</span>
+          </a>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -383,7 +380,7 @@ function Report({ r, business, categories, serviceNames = {}, hidden, onToggle, 
           <div class="card"><ul class="passed">{r.passed.map((p) => <li><Icon name="check" size={14} />{p.title}</li>)}</ul></div>
         </section>
       )}
-      <p class="faint small mt">We checked {r.pagesChecked} page{r.pagesChecked === 1 ? '' : 's'}{r.facts ? ` and ${r.facts.linksChecked} links` : ''}, Google's mobile and desktop tests, and Google Maps.</p>
+      <p class="faint small mt">We checked {r.pagesChecked} page{r.pagesChecked === 1 ? '' : 's'}{r.facts?.linksChecked ? ` and ${r.facts.linksChecked} links` : ''}, Google's mobile and desktop tests, and Google Maps.</p>
     </div>
   );
 }

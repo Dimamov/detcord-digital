@@ -81,18 +81,20 @@ export function clientScopeSql(user) {
 }
 
 // Creates a one-time link (invite or reset), invalidating earlier unused links of that kind, and emails it.
-export async function issueLink(c, user, kind) {
+// With notify: false the caller delivers the link itself (e.g. inside a report email or text).
+export async function issueLink(c, user, kind, { notify = true, ttlMs, next } = {}) {
   const db = c.env.DB;
   const token = randomToken();
   const id = newId();
-  const expires = now() + (kind === 'invite' ? INVITE_MS : RESET_MS);
+  const expires = now() + (ttlMs || (kind === 'invite' ? INVITE_MS : RESET_MS));
   await db.batch([
     db.prepare('UPDATE tokens SET used_at=? WHERE user_id=? AND kind=? AND used_at IS NULL').bind(now(), user.id, kind),
     db.prepare('INSERT INTO tokens (id, user_id, kind, token_hash, created_at, expires_at) VALUES (?,?,?,?,?,?)')
       .bind(id, user.id, kind, await sha256(token), now(), expires),
   ]);
   const origin = c.env.PUBLIC_URL || new URL(c.req.url).origin;
-  const url = `${origin}/${kind === 'invite' ? 'activate' : 'reset'}#${id}.${token}`;
+  const url = `${origin}/${kind === 'invite' ? 'activate' : 'reset'}${next ? `?next=${encodeURIComponent(next)}` : ''}#${id}.${token}`;
+  if (!notify) return { id, url, expiresAt: expires };
   const roleLabel = { admin: 'administrator', rep: 'sales', client: 'client' }[user.role];
   const email = kind === 'invite'
     ? renderEmail({

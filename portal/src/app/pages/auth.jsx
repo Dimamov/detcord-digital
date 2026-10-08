@@ -86,9 +86,10 @@ export function SetPassword({ kind }) {
     if (pw !== pw2) return setError('The two passwords don’t match.');
     run(async () => {
       await api('POST', base, { link, password: pw });
+      const next = query().next;
       history.replaceState({}, '', location.pathname); // drop the secret from the address bar
       await refreshSession();
-      navigate('/', { replace: true });
+      navigate(next && next.startsWith('/') && !next.startsWith('//') ? next : '/', { replace: true });
     });
   };
   return (

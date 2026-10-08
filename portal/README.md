@@ -52,7 +52,7 @@ deploys staging and applies migrations. It skips the deploy until the `CLOUDFLAR
 | `RESEND_API_KEY` | invite, reset, agreement, invoice and receipt emails | admins get a link to share by hand; no receipts |
 | `CLOVER_MERCHANT_ID`, `CLOVER_PRIVATE_TOKEN`, `CLOVER_WEBHOOK_SECRET` | online invoice payments (Clover Hosted Checkout) | invoices show "online payment not set up"; admins can record manual payments |
 | `GOOGLE_API_KEY` | website checks: Google PageSpeed and the Google Business Profile lookup (Places API (New)) | the speed test runs only within Google's shared quota; the Google profile check is skipped and the report says so |
-| `TWILIO_ACCOUNT_SID`, `TWILIO_API_KEY_SID`, `TWILIO_API_KEY_SECRET`, `TWILIO_MESSAGING_SERVICE_SID` | texting website check reports | the Text option says texting isn't set up; staff can copy the report link |
+| `TWILIO_ACCOUNT_SID`, `TWILIO_API_KEY_SID`, `TWILIO_API_KEY_SECRET`, `TWILIO_MESSAGING_SERVICE_SID` | texting website check reports | Text says texting isn't set up; staff get the portal link to pass on |
 
 Add them in Cloudflare under **Workers & Pages → (worker) → Settings → Variables and Secrets** (type Secret).
 `CLOVER_API_BASE` is a plain var: sandbox on staging, `https://api.clover.com` in production. Clover's webhook
@@ -70,9 +70,11 @@ PageSpeed on mobile and desktop, and looks up the Google Business Profile and th
 scored findings in four areas (search visibility, local search and Google profile, mobile and customer experience, speed
 security and site health), each with what was found, why it matters, how to fix it, and the matching Detcord service.
 
-Staff can hide findings and add a note, then email or text the customer a no-login link (`/r/<token>`, 60 days, can be
-replaced to cancel old links). Texting requires confirming the customer agreed to it. The check stays within the free
-plan's 50 subrequests per request. For local testing against a site on your machine, run
+Staff can hide findings and add a note, then press **Email** or **Text**. The message carries a link into the
+customer's portal: the first time, a one-time password setup link (7 days) that creates their client login and opens the
+report; after that, a sign-in link to `/reports/<id>`. Customers only see checks that were sent to them. Texting requires
+confirming the customer agreed to it. If email or texting isn't connected, nothing is claimed as sent and staff get the
+link to pass on. The check stays within the free plan's 50 subrequests per request. For local testing against a site on your machine, run
 `npx wrangler dev --env staging --var AUDIT_ALLOW_PRIVATE:1 --var AUDIT_SKIP_GOOGLE:1`; production refuses private addresses.
 
 ## Security rules the code enforces
