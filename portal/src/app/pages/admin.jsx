@@ -229,7 +229,7 @@ function CommissionSettings() {
             <Field label="Paid on"><select class="select" value={edit.basis} onChange={(e) => setEdit({ ...edit, basis: e.target.value })}><option value="setup">Setup fees</option><option value="monthly">Monthly fees</option><option value="both">Setup + monthly</option></select></Field>
             {edit.basis !== 'setup' && <Field label="Months of monthly fees"><input class="input" inputMode="numeric" value={edit.months ?? ''} onInput={(e) => setEdit({ ...edit, months: e.target.value })} placeholder="e.g. 3" /></Field>}
             <Field label="Earned"><select class="select" value={edit.trigger} onChange={(e) => setEdit({ ...edit, trigger: e.target.value })}>{Object.entries(TRIGGERS).map(([k, v]) => <option value={k}>{v}</option>)}</select></Field>
-            <Field label="Applies to"><select class="select" value={edit.rep_id || ''} onChange={(e) => setEdit({ ...edit, rep_id: e.target.value })}><option value="">All reps</option>{(team.data?.team || []).filter((t) => t.role === 'rep').map((t) => <option value={t.id}>{t.name}</option>)}</select></Field>
+            <Field label="Applies to"><select class="select" value={edit.rep_id || ''} onChange={(e) => setEdit({ ...edit, rep_id: e.target.value })}><option value="">All reps</option>{(team.data?.team || []).filter((t) => t.role === 'rep' || t.role === 'admin').map((t) => <option value={t.id}>{t.name}</option>)}</select></Field>
             <label class="check full"><input type="checkbox" checked={edit.active} onChange={(e) => setEdit({ ...edit, active: e.target.checked })} />Rule is on</label>
             <label class="check full"><input type="checkbox" checked={edit.approved} onChange={(e) => setEdit({ ...edit, approved: e.target.checked })} />Approved: this is the agreed rule (removes the “provisional” label)</label>
           </div>
@@ -242,14 +242,18 @@ function CommissionSettings() {
 
 // ---------- Commissions report ----------
 export function Commissions({ user }) {
-  const { loading, data, error, reload } = useLoad('/sales/commissions');
+  const [mine, setMine] = useState(false);
+  const { loading, data, error, reload } = useLoad(`/sales/commissions${mine ? '?mine=1' : ''}`, [mine]);
   if (loading) return <div class="page"><Loading /></div>;
   if (error) return <div class="page"><ErrorBox error={error} retry={reload} /></div>;
   return (
     <div class="page">
       <div class="page-head">
         <div><div class="eyebrow">Sales</div><h1>Commissions</h1><p class="sub">Calculated from won deals and the configured rules. Each line shows the rule and deal it came from.</p></div>
-        <div class="stat" style="min-width:200px"><div class="label">{user.role === 'rep' ? 'Your total' : 'Total'}{data.anyProvisional ? ' (provisional)' : ''}</div><div class="value">{money(data.totalCents)}</div></div>
+        <div class="row" style="align-items:stretch">
+          {user.role === 'admin' && <select class="select" value={mine ? 'mine' : 'all'} onChange={(e) => setMine(e.target.value === 'mine')} aria-label="Whose commissions"><option value="all">Everyone</option><option value="mine">Only mine</option></select>}
+          <div class="stat" style="min-width:200px"><div class="label">{user.role === 'rep' || mine ? 'Your total' : 'Total'}{data.anyProvisional ? ' (provisional)' : ''}</div><div class="value">{money(data.totalCents)}</div></div>
+        </div>
       </div>
       {data.anyProvisional && <div class="alert warn mb">Some or all of these numbers use rules that haven’t been approved yet, so they’re estimates, not payouts.</div>}
       {data.notYetCalculated && <div class="alert info mb">{data.notYetCalculated}</div>}

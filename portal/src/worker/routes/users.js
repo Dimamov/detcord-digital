@@ -139,7 +139,7 @@ r.put('/:id/clients/:clientId', async (c) => {
   const actor = requireRole(c, 'admin');
   const db = c.env.DB;
   const { id, clientId } = c.req.param();
-  const rep = await db.prepare("SELECT * FROM users WHERE id=? AND role='rep'").bind(id).first();
+  const rep = await db.prepare("SELECT * FROM users WHERE id=? AND role IN ('admin','rep') AND status<>'disabled'").bind(id).first();
   if (!rep) fail(404, 'Sales rep not found.');
   const client = await db.prepare('SELECT name FROM clients WHERE id=?').bind(clientId).first();
   if (!client) fail(404, 'Client not found.');

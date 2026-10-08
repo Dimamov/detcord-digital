@@ -32,7 +32,8 @@ export function ClientsList({ user }) {
   const [status, setStatus] = useState(qs.status || '');
   const params = new URLSearchParams({ ...(q && { q }), ...(status && { status }) }).toString();
   const { loading, data, error, reload } = useLoad(`/clients${params ? `?${params}` : ''}`, [params]);
-  const rows = (data?.clients || []).filter((c) => !qs.unassigned || !c.reps);
+  const [mine, setMine] = useState(false);
+  const rows = (data?.clients || []).filter((c) => (!qs.unassigned || !c.reps) && (!mine || c.mine));
   return (
     <div class="page">
       <div class="page-head">
@@ -45,6 +46,7 @@ export function ClientsList({ user }) {
           <option value="">All statuses</option>
           {Object.entries(STATUS_LABEL).map(([k, v]) => <option value={k}>{v}</option>)}
         </select>
+        {user.role === 'admin' && <label class="check"><input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} />Only my clients</label>}
       </div>
       {loading ? <Loading /> : error ? <ErrorBox error={error} retry={reload} /> : !rows.length ? (
         <div class="card"><Empty goat title={q || status ? 'No clients match' : 'No clients yet'} action={!q && !status && <a class="btn" href="/clients/new">Add your first client</a>}>
@@ -129,7 +131,7 @@ export function NewClient({ user }) {
             <Field label="Assigned rep" help="optional">
               <select class="select" value={f.repId} onChange={set('repId')}>
                 <option value="">No rep yet</option>
-                {(team.data?.team || []).filter((t) => t.role === 'rep').map((t) => <option value={t.id}>{t.name}</option>)}
+                {(team.data?.team || []).filter((t) => (t.role === 'rep' || t.role === 'admin') && t.status !== 'disabled').map((t) => <option value={t.id}>{t.id === user.id ? `${t.name} (me)` : t.name}</option>)}
               </select>
             </Field>
           )}
@@ -372,7 +374,7 @@ function TeamCard({ data, user, reload }) {
         <div class="row mt">
           <select class="select" style="flex:1" value={pick} onChange={(e) => setPick(e.target.value)} aria-label="Assign a rep">
             <option value="">Assign a rep…</option>
-            {(team.data?.team || []).filter((t) => t.role === 'rep' && !assigned.has(t.id)).map((t) => <option value={t.id}>{t.name}</option>)}
+            {(team.data?.team || []).filter((t) => (t.role === 'rep' || t.role === 'admin') && t.status !== 'disabled' && !assigned.has(t.id)).map((t) => <option value={t.id}>{t.id === user.id ? `${t.name} (me)` : t.name}</option>)}
           </select>
           <button class="btn sm secondary" disabled={!pick} onClick={assign}>Assign</button>
         </div>

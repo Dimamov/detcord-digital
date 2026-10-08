@@ -288,8 +288,10 @@ export function computeCommissions(rules, events) {
 r.get('/commissions', async (c) => {
   const user = requireRole(c, 'admin', 'rep');
   const db = c.env.DB;
-  const repFilter = user.role === 'rep' ? 'AND owner_id=?' : '';
-  const binds = user.role === 'rep' ? [user.id] : [];
+  // Reps see their own; admins can switch between everyone and their own deals.
+  const own = user.role === 'rep' || c.req.query('mine') === '1';
+  const repFilter = own ? 'AND owner_id=?' : '';
+  const binds = own ? [user.id] : [];
   const rules = (await db.prepare('SELECT * FROM commission_rules').all()).results;
   const deals = (await db.prepare(`SELECT * FROM (SELECT d.*, cl.name AS client_name, u.name AS owner FROM deals d JOIN pipeline_stages ps ON ps.id=d.stage_id
     JOIN clients cl ON cl.id=d.client_id LEFT JOIN users u ON u.id=d.owner_id WHERE ps.outcome='won') WHERE 1=1 ${repFilter}`).bind(...binds).all()).results;
