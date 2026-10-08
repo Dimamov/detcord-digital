@@ -23,7 +23,7 @@ export function renderEmail({ origin, heading, paragraphs = [], button, footnote
   return { html, text: textBody };
 }
 
-// Returns { status: 'sent' | 'not_configured' | 'failed', error? }. Never throws.
+// Returns { status: 'sent' | 'not_configured' | 'failed', id?, error? }. Never throws.
 export async function sendEmail(env, { to, subject, html, text, idempotencyKey }) {
   if (!env.RESEND_API_KEY) return { status: 'not_configured', error: 'Email sending is not configured (RESEND_API_KEY missing).' };
   try {
@@ -37,7 +37,8 @@ export async function sendEmail(env, { to, subject, html, text, idempotencyKey }
       body: JSON.stringify({ from: env.EMAIL_FROM, reply_to: env.REPLY_TO, to: [to], subject, html, text }),
       signal: AbortSignal.timeout(15000),
     });
-    if (res.ok) return { status: 'sent' };
+    // Resend's message ID lets us trace a specific email in its dashboard.
+    if (res.ok) return { status: 'sent', id: (await res.json().catch(() => ({}))).id || null };
     const reason = res.status === 401 ? 'The email provider rejected the API key.'
       : res.status === 403 || res.status === 422 ? 'The email provider rejected the sender or recipient.'
       : `The email provider returned ${res.status}.`;

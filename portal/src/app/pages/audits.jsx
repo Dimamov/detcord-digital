@@ -164,7 +164,7 @@ export function AuditPage({ id, user }) {
                   {a.deliveries.map((d) => (
                     <div class="small">
                       <div class="row between"><span><Icon name={d.channel === 'sms' ? 'phone' : 'mail'} size={14} /> {d.recipient}</span><span class={`badge ${d.status === 'sent' ? 'good' : 'bad'}`}>{d.status === 'sent' ? 'Sent' : d.status === 'not_configured' ? 'Not sent' : 'Failed'}</span></div>
-                      <div class="faint">{ago(d.created_at)}{d.by_name ? ` · ${d.by_name}` : ''} · {d.link_kind === 'invite' ? 'password setup link' : 'sign-in link'}{d.error ? ` · ${d.error}` : ''}</div>
+                      <div class="faint">{ago(d.created_at)}{d.by_name ? ` · ${d.by_name}` : ''} · {d.link_kind === 'invite' ? 'password setup link' : 'sign-in link'}{d.error ? ` · ${d.error}` : ''}{d.provider_id ? ` · ID ${d.provider_id}` : ''}</div>
                     </div>
                   ))}
                 </div>
