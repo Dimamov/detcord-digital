@@ -51,6 +51,8 @@ deploys staging and applies migrations. It skips the deploy until the `CLOUDFLAR
 | `BOOTSTRAP_TOKEN` | creating the first admin | bootstrap returns 404 |
 | `RESEND_API_KEY` | invite, reset, agreement, invoice and receipt emails | admins get a link to share by hand; no receipts |
 | `CLOVER_MERCHANT_ID`, `CLOVER_PRIVATE_TOKEN`, `CLOVER_WEBHOOK_SECRET` | online invoice payments (Clover Hosted Checkout) | invoices show "online payment not set up"; admins can record manual payments |
+| `GOOGLE_API_KEY` | website checks: Google PageSpeed and the Google Business Profile lookup (Places API (New)) | the speed test runs only within Google's shared quota; the Google profile check is skipped and the report says so |
+| `TWILIO_ACCOUNT_SID`, `TWILIO_API_KEY_SID`, `TWILIO_API_KEY_SECRET`, `TWILIO_MESSAGING_SERVICE_SID` | texting website check reports | the Text option says texting isn't set up; staff can copy the report link |
 
 Add them in Cloudflare under **Workers & Pages → (worker) → Settings → Variables and Secrets** (type Secret).
 `CLOVER_API_BASE` is a plain var: sandbox on staging, `https://api.clover.com` in production. Clover's webhook
@@ -58,7 +60,20 @@ URL is `<portal URL>/api/webhooks/clover`. **Settings → Payments** shows the C
 **Test connection** button. Clover only shows as connected after that test succeeds.
 
 Files are stored in R2 (`MEDIA` binding: `detcord-portal-media-staging` / `detcord-portal-media`). Wrangler
-creates the bucket on the first deploy. Later phases add Twilio, Anthropic, Google and Zernio secrets.
+creates the bucket on the first deploy. Later phases add Anthropic, Google OAuth and Zernio secrets.
+
+## Website checks
+
+From a client's **Website check** tab (or "Create client and run check" on the new client form), staff run a check that
+crawls the homepage and up to six key pages, robots.txt, the sitemap and a sample of links and images, runs Google
+PageSpeed on mobile and desktop, and looks up the Google Business Profile and the top nearby competitors. It produces
+scored findings in four areas (search visibility, local search and Google profile, mobile and customer experience, speed
+security and site health), each with what was found, why it matters, how to fix it, and the matching Detcord service.
+
+Staff can hide findings and add a note, then email or text the customer a no-login link (`/r/<token>`, 60 days, can be
+replaced to cancel old links). Texting requires confirming the customer agreed to it. The check stays within the free
+plan's 50 subrequests per request. For local testing against a site on your machine, run
+`npx wrangler dev --env staging --var AUDIT_ALLOW_PRIVATE:1 --var AUDIT_SKIP_GOOGLE:1`; production refuses private addresses.
 
 ## Security rules the code enforces
 

@@ -6,6 +6,7 @@ import { requireUser, requireRole, requireClient, isStaff, clientScopeSql } from
 import { createInvoice, recalcInvoice, recordPayment, lineTotal } from '../lib/invoices.js';
 import { cloverConfig, createCheckout, verifyCloverSignature, readCloverEvent } from '../lib/clover.js';
 import { getSettings, putSetting } from '../lib/settings.js';
+import { twilioConfig } from '../lib/sms.js';
 import { sendEmail, renderEmail } from '../lib/email.js';
 
 const r = new Hono();
@@ -292,7 +293,7 @@ r.put('/settings/company', async (c) => {
   const user = requireRole(c, 'admin');
   const body = await readJson(c);
   const db = c.env.DB;
-  for (const [k, max] of [['legalName', 160], ['address', 300], ['signer', 120], ['email', 160]]) {
+  for (const [k, max] of [['legalName', 160], ['address', 300], ['signer', 120], ['email', 160], ['phone', 40]]) {
     if (body[k] !== undefined) await putSetting(db, `company.${k}`, text(body[k], { max }) || '', user.id);
   }
   return c.json({ company: await getSettings(db, 'company.') });
@@ -302,6 +303,8 @@ r.get('/settings/integrations', async (c) => {
   requireRole(c, 'admin');
   const cfg = cloverConfig(c.env);
   const s = await getSettings(c.env.DB, 'integration.clover.');
+  const tw = await getSettings(c.env.DB, 'integration.twilio.');
+  const gg = await getSettings(c.env.DB, 'integration.google.');
   return c.json({
     clover: {
       configured: cfg.ready, missing: cfg.missing, sandbox: cfg.sandbox,
@@ -310,6 +313,14 @@ r.get('/settings/integrations', async (c) => {
       state: !cfg.ready ? 'not_configured' : s.test?.ok ? 'connected' : s.test ? 'failing' : 'untested',
     },
     email: { configured: !!c.env.RESEND_API_KEY },
+    twilio: (() => {
+      const t = twilioConfig(c.env);
+      // Connected only after a credentials test passed or a text was actually delivered to Twilio.
+      return { configured: t.ready, missing: t.missing, lastTest: tw.test || null, lastSend: tw.lastSend || null,
+        state: !t.ready ? 'not_configured' : tw.test?.ok ? 'connected' : tw.test ? 'failing' : 'untested' };
+    })(),
+    google: { configured: !!c.env.GOOGLE_API_KEY, lastTest: gg.test || null,
+      state: !c.env.GOOGLE_API_KEY ? 'not_configured' : gg.test?.ok ? 'connected' : gg.test ? 'failing' : 'untested' },
   });
 });
 

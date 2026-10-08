@@ -10,6 +10,7 @@ import home from './routes/home.js';
 import contracts from './routes/contracts.js';
 import billing from './routes/billing.js';
 import media from './routes/media.js';
+import audits from './routes/audits.js';
 
 const app = new Hono();
 
@@ -39,6 +40,7 @@ app.route('/api', home);
 app.route('/api', contracts);
 app.route('/api', billing);
 app.route('/api', media);
+app.route('/api', audits);
 
 app.all('/api/*', (c) => c.json({ error: 'Not found.' }, 404));
 

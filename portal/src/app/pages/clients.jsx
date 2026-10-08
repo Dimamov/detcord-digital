@@ -7,6 +7,7 @@ import { TaskLine } from './dashboard.jsx';
 import { ContractsTab } from './contracts.jsx';
 import { BillingTab } from './billing.jsx';
 import { FilesPanel } from './files.jsx';
+import { AuditsTab } from './audits.jsx';
 
 export function IndustrySelect({ value, onChange, required }) {
   return (
@@ -74,7 +75,7 @@ export function ClientsList({ user }) {
 
 // ---------- New or existing ----------
 export function NewClient({ user }) {
-  const [f, setF] = useState({ name: '', industry: '', phone: '', website: '', city: '', email: '', contactName: '', contactTitle: '', contactEmail: '', contactPhone: '', decisionMaker: true, repId: '', source: '' });
+  const [f, setF] = useState({ name: '', industry: '', phone: '', website: '', city: '', email: '', contactName: '', contactTitle: '', contactEmail: '', contactPhone: '', decisionMaker: true, repId: '', source: '', runCheck: true });
   const [matches, setMatches] = useState({ matches: [], hidden: 0 });
   const team = useLoad(user.role === 'admin' ? '/team' : null);
   const { busy, error, run } = useAction();
@@ -98,7 +99,7 @@ export function NewClient({ user }) {
         contact: f.contactName ? { name: f.contactName, title: f.contactTitle, email: f.contactEmail, phone: f.contactPhone, decisionMaker: f.decisionMaker } : undefined,
       });
       toast(`${f.name} added.`);
-      navigate(`/clients/${id}`);
+      navigate(f.website && f.runCheck ? `/clients/${id}?tab=audits&run=1` : `/clients/${id}`);
     });
   };
 
@@ -119,7 +120,8 @@ export function NewClient({ user }) {
           <Field label="Industry"><IndustrySelect value={f.industry} onChange={(v) => setF({ ...f, industry: v })} /></Field>
           <Field label="Phone"><input class="input" type="tel" value={f.phone} onInput={set('phone')} /></Field>
           <Field label="Website"><input class="input" placeholder="example.com" value={f.website} onInput={set('website')} /></Field>
-          <Field label="City"><input class="input" value={f.city} onInput={set('city')} /></Field>
+          <Field label="Business email"><input class="input" type="email" placeholder="owner@example.com" value={f.email} onInput={set('email')} /></Field>
+          <Field label="City" help="used for the local search check"><input class="input" value={f.city} onInput={set('city')} /></Field>
           <Field label="Lead source" help="optional"><input class="input" placeholder="Referral, website, cold call…" value={f.source} onInput={set('source')} /></Field>
           {user.role === 'admin' && (
             <Field label="Assigned rep" help="optional">
@@ -139,15 +141,16 @@ export function NewClient({ user }) {
           <Field label="Mobile"><input class="input" type="tel" value={f.contactPhone} onInput={set('contactPhone')} /></Field>
           <label class="check full"><input type="checkbox" checked={f.decisionMaker} onChange={set('decisionMaker')} />This person makes the buying decision</label>
         </div>
+        {f.website && <label class="check"><input type="checkbox" checked={f.runCheck} onChange={set('runCheck')} />Run a website and Google check right after saving</label>}
         {error && <div class="alert bad">{error}</div>}
-        <div class="row"><button class="btn" disabled={busy}>{busy ? 'Saving…' : 'Create client'}</button><a class="btn ghost" href="/clients">Cancel</a></div>
+        <div class="row"><button class="btn" disabled={busy}>{busy ? 'Saving…' : f.website && f.runCheck ? 'Create client and run check' : 'Create client'}</button><a class="btn ghost" href="/clients">Cancel</a></div>
       </form>
     </div>
   );
 }
 
 // ---------- Client record ----------
-const TABS = [['overview', 'Overview'], ['discovery', 'Discovery'], ['deals', 'Deals'], ['contracts', 'Agreements'], ['billing', 'Billing'], ['files', 'Files'], ['tasks', 'Tasks'], ['notes', 'Notes'], ['access', 'Portal access']];
+const TABS = [['overview', 'Overview'], ['audits', 'Website check'], ['discovery', 'Discovery'], ['deals', 'Deals'], ['contracts', 'Agreements'], ['billing', 'Billing'], ['files', 'Files'], ['tasks', 'Tasks'], ['notes', 'Notes'], ['access', 'Portal access']];
 
 export function ClientRecord({ id, user }) {
   if (user.role === 'client') return <ClientOwnRecord id={id} />;
@@ -191,6 +194,7 @@ function StaffClientRecord({ id, user }) {
       {tab === 'contracts' && <ContractsTab clientId={c.id} user={user} />}
       {tab === 'billing' && <BillingTab clientId={c.id} user={user} />}
       {tab === 'files' && <FilesPanel clientId={c.id} user={user} />}
+      {tab === 'audits' && <AuditsTab client={c} user={user} onChanged={reload} />}
     </div>
   );
 }

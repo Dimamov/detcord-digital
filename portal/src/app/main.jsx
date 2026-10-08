@@ -13,6 +13,7 @@ import { Account } from './pages/account.jsx';
 import { ContractPage } from './pages/contracts.jsx';
 import { InvoicesPage, InvoicePage } from './pages/billing.jsx';
 import { FilesPage } from './pages/files.jsx';
+import { AuditPage, PublicReport } from './pages/audits.jsx';
 
 const PUBLIC = [
   ['/login', Login],
@@ -20,6 +21,7 @@ const PUBLIC = [
   ['/activate', () => <SetPassword kind="invite" />],
   ['/reset', () => <SetPassword kind="reset" />],
   ['/intake', Intake],
+  ['/r/:token', PublicReport],
 ];
 
 const PRIVATE = [
@@ -39,6 +41,7 @@ const PRIVATE = [
   ['/invoices', InvoicesPage, ['admin', 'rep', 'client']],
   ['/invoices/:id', InvoicePage, ['admin', 'rep', 'client']],
   ['/files', FilesPage, ['client']],
+  ['/audits/:id', AuditPage, ['admin', 'rep']],
 ];
 
 const NAV = {
@@ -108,7 +111,8 @@ function App() {
   const path = route.value.split(/[?#]/)[0].replace(/\/$/, '') || '/';
 
   for (const [pattern, Page] of PUBLIC) {
-    if (match(pattern, path)) return <><Page /><Toasts /></>;
+    const params = match(pattern, path);
+    if (params) return <><Page {...params} /><Toasts /></>;
   }
   const s = session.value;
   if (s === undefined) return <Loading />;

@@ -93,7 +93,7 @@ export function Settings() {
     <div class="page">
       <div class="page-head"><div><div class="eyebrow">Agency</div><h1>Settings</h1></div></div>
       <div class="tabs">
-        {[['services', 'Services and prices'], ['pipeline', 'Pipeline stages'], ['commissions', 'Commission rules'], ['company', 'Company'], ['payments', 'Payments']].map(([k, l]) => <button aria-selected={tab === k} onClick={() => setTab(k)}>{l}</button>)}
+        {[['services', 'Services and prices'], ['pipeline', 'Pipeline stages'], ['commissions', 'Commission rules'], ['company', 'Company'], ['payments', 'Integrations']].map(([k, l]) => <button aria-selected={tab === k} onClick={() => setTab(k)}>{l}</button>)}
       </div>
       {tab === 'company' && <CompanySettings />}
       {tab === 'payments' && <PaymentSettings />}
@@ -289,6 +289,7 @@ function CompanySettings() {
       <Field label="Business address"><input class="input" value={f.address} onInput={(e) => setForm({ ...f, address: e.target.value })} /></Field>
       <Field label="Default signer for Detcord" help="name and title"><input class="input" value={f.signer} onInput={(e) => setForm({ ...f, signer: e.target.value })} /></Field>
       <Field label="Notice email"><input class="input" type="email" value={f.email} onInput={(e) => setForm({ ...f, email: e.target.value })} /></Field>
+      <Field label="Phone for customers" help="shown on website check reports"><input class="input" type="tel" value={f.phone || ''} onInput={(e) => setForm({ ...f, phone: e.target.value })} /></Field>
       {act.error && <div class="alert bad">{act.error}</div>}
       <div><button class="btn" disabled={act.busy}>Save</button></div>
     </form>
@@ -324,10 +325,51 @@ function PaymentSettings() {
           <span class="small muted">Creates a $1 checkout page to prove the credentials work. Nothing is charged.</span>
         </div>
       </section>
+      <IntegrationCard title="Text messages (Twilio)" item={data.twilio} task="Task 5" path="twilio"
+        about="Sends website check reports by text, and later powers GOAT Command. Connected only after the test below passes."
+        okText={(t) => `${t.trial ? 'Trial account. ' : ''}Sending from ${t.from}.`} testNote="Checks the API key and the sending number. No text is sent." />
+      <IntegrationCard title="Google speed test and Business Profile" item={data.google} task="Task 10" path="google"
+        about="Website checks use Google PageSpeed and Google Places. Without a key, the speed test runs only when Google's shared limit allows, and the Google profile check is skipped."
+        okText={() => 'PageSpeed and Places both answered.'} testNote="Runs one speed test and one Places search." />
       <section class="card">
         <div class="row between"><h2 style="margin:0">Email</h2><span class={`badge ${data.email.configured ? 'good' : 'bad'}`}>{data.email.configured ? 'Set up' : 'Not set up'}</span></div>
         <p class="muted" style="margin-bottom:0">{data.email.configured ? 'Invites, receipts and agreement notices are emailed from info@detcorddigital.com.' : 'Without email, invite links are shown to you to share by hand, and receipts are not sent. Bob sets this up in Task 2.'}</p>
       </section>
     </div>
+  );
+}
+
+const STATE = { not_configured: ['Not set up', 'bad'], untested: ['Set up, not tested', 'warn'], failing: ['Test failed', 'bad'], connected: ['Connected', 'good'] };
+
+function IntegrationCard({ title, item, task, path, about, okText, testNote }) {
+  const [t, setT] = useState(item);
+  const act = useAction();
+  const label = STATE[t.state];
+  const test = () => act.run(async () => {
+    try {
+      const r = await api('POST', `/settings/integrations/${path}/test`);
+      setT({ ...t, state: 'connected', lastTest: r });
+      toast(`${title.split(' (')[0]} connected.`);
+    } catch (e) {
+      setT({ ...t, state: 'failing', lastTest: { ok: false, error: e.data?.error || e.message, at: Date.now() } });
+      throw e;
+    }
+  });
+  const last = t.lastTest;
+  return (
+    <section class="card">
+      <div class="row between"><h2 style="margin:0">{title}</h2><span class={`badge ${label[1]}`}>{label[0]}</span></div>
+      <p class="muted">{about}</p>
+      <dl class="kv">
+        {t.missing?.length > 0 && <><dt>Missing</dt><dd>{t.missing.join(', ')}<div class="small muted">Bob adds these as Worker secrets ({task}).</div></dd></>}
+        {!t.configured && !t.missing && <><dt>Missing</dt><dd>GOOGLE_API_KEY<div class="small muted">Bob adds this as a Worker secret ({task}).</div></dd></>}
+        <dt>Last test</dt><dd>{last ? `${last.ok ? 'Passed' : 'Failed'} ${dateTime(last.at)}${last.by ? ` by ${last.by}` : ''}${last.ok ? `. ${okText(last)}` : last.error ? `: ${last.error}` : ''}${!last.ok && typeof last.pagespeed === 'string' ? ` ${last.pagespeed}` : ''}${!last.ok && typeof last.places === 'string' ? ` ${last.places}` : ''}` : 'Never'}</dd>
+      </dl>
+      {act.error && <div class="alert bad mt">{act.error}</div>}
+      <div class="row mt">
+        <button class="btn" onClick={test} disabled={!t.configured || act.busy}>{act.busy ? 'Testing…' : 'Test connection'}</button>
+        <span class="small muted">{testNote}</span>
+      </div>
+    </section>
   );
 }
