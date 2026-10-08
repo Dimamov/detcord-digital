@@ -56,6 +56,7 @@ function StaffDay({ user }) {
         </div>
       </div>
 
+      {admin && <EmailFailures emails={data.emails} />}
       <Board page="staff-home" cards={[
         { id: 'stats', title: 'Numbers', col: 'top', node: (
       <div class="grid four mb">
@@ -72,14 +73,6 @@ function StaffDay({ user }) {
         </>}
       </div>
         ) },
-        { id: 'email', title: 'Email delivery', col: 'top', node: admin && (<section class="card">
-        <h2>Email delivery</h2>
-        {!data.emailTrackingReady && <div class="alert warn">Delivery tracking needs its Resend webhook connected. Accepted means the provider accepted the message; delivery is not yet confirmed.</div>}
-        {data.emails?.length ? <div class="list">{data.emails.map((e) => <div class="list-item" key={e.id}>
-          <div style="flex:1;min-width:0"><div class="title">{e.recipient}</div><div class="meta">{e.subject} · {ago(e.created_at)}</div>{e.error && <div class="small">{e.error}</div>}</div>
-          <span class={`badge ${e.status === 'delivered' ? 'good' : ['bounced','failed','suppressed','not_configured'].includes(e.status) ? 'bad' : 'warn'}`}>{e.status === 'accepted' ? 'Accepted — awaiting delivery' : e.status.replaceAll('_', ' ')}</span>
-        </div>)}</div> : <p class="muted">New emails will appear here. Failed deliveries also appear in Recent activity.</p>}
-      </section>) },
         { id: 'tasks', title: 'Follow-ups due', col: 'main', node: (
           <section class="card">
             <div class="card-head"><h2>Follow-ups due</h2><a class="small muted" href="/tasks">All tasks</a></div>
@@ -179,6 +172,49 @@ function StaffDay({ user }) {
             </section>
           ) },
       ]} />
+      {admin && <EmailDelivery emails={data.emails} ready={data.emailTrackingReady} />}
     </div>
+  );
+}
+
+const FAILED = ['bounced', 'failed', 'suppressed', 'not_configured'];
+const failedRecently = (emails) => (emails || []).filter((e) => FAILED.includes(e.status) && Date.now() - e.created_at < 7 * 864e5);
+
+function EmailLine({ e }) {
+  return (
+    <div class="list-item">
+      <div style="flex:1;min-width:0"><div class="title">{e.recipient}</div><div class="meta">{e.subject} · {ago(e.created_at)}</div>{e.error && <div class="small">{e.error}</div>}</div>
+      <span class={`badge ${e.status === 'delivered' ? 'good' : FAILED.includes(e.status) ? 'bad' : 'warn'}`}>{e.status === 'accepted' ? 'Awaiting delivery' : e.status.replaceAll('_', ' ')}</span>
+    </div>
+  );
+}
+
+// Email delivery only matters when something failed: failures from the last week get a banner at the top,
+// everything else is a one-line box at the bottom that opens into the list.
+function EmailFailures({ emails }) {
+  const failed = failedRecently(emails);
+  if (!failed.length) return null;
+  return (
+    <section class="card mb" style="border-color:var(--bad)">
+      <h2>{failed.length === 1 ? '1 email was not delivered' : `${failed.length} emails were not delivered`}</h2>
+      <div class="list">{failed.map((e) => <EmailLine e={e} key={e.id} />)}</div>
+    </section>
+  );
+}
+
+function EmailDelivery({ emails = [], ready }) {
+  const count = (fn) => emails.filter(fn).length;
+  const delivered = count((e) => e.status === 'delivered');
+  const waiting = count((e) => !FAILED.includes(e.status) && e.status !== 'delivered');
+  const failed = count((e) => FAILED.includes(e.status));
+  return (
+    <details class="email-mini">
+      <summary>
+        <Icon name="mail" size={14} />
+        <span>Email delivery</span>
+        <span class="faint">{emails.length ? `${delivered} delivered${waiting ? ` · ${waiting} waiting` : ''}${failed ? ` · ${failed} failed` : ''} · last ${ago(emails[0].created_at)}` : 'No emails yet'}{ready ? '' : ' · tracking not connected'}</span>
+      </summary>
+      {emails.length ? <div class="list">{emails.map((e) => <EmailLine e={e} key={e.id} />)}</div> : null}
+    </details>
   );
 }

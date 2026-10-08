@@ -5,7 +5,8 @@ import { buildSections, progress, computeResult } from '../../shared/discovery/e
 import { visible } from '../../shared/discovery/schema.js';
 import { industryById } from '../../shared/discovery/industries.js';
 import { SERVICES, serviceById } from '../../shared/services.js';
-import { ResultCard, IndustrySelect } from './clients.jsx';
+import { ResultCard } from './clients.jsx';
+import { IndustrySelect, industryName } from '../industries.jsx';
 
 const answered = (v) => v !== undefined && v !== null && v !== '' && !(Array.isArray(v) && !v.length);
 
@@ -165,6 +166,7 @@ function Runner({ initial, client }) {
             ))}
           </section>
           {preview.redFlags.length > 0 && <section class="card"><h3>Watch out</h3>{preview.redFlags.map((f) => <div class="small" style="padding:4px 0">• {f}</div>)}</section>}
+          {!ind && industry && industry !== 'other' && <section class="card"><h3>{industryName(industry)}</h3><div class="small muted">No questions written for this industry yet, so the call uses the general questions.</div></section>}
           {ind && <section class="card"><h3>{ind.name}</h3><div class="small muted">Usually starts with: {ind.keyServices.slice(0, 4).map((s) => serviceById[s]?.name.replace(/ \(.*\)$/, '')).join(', ')}</div></section>}
         </aside>
       </div>

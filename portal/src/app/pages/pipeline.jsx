@@ -3,7 +3,7 @@ import { useLoad, api, toast, money, due, query } from '../lib.js';
 import { Loading, ErrorBox, Empty, Icon } from '../ui.jsx';
 import { TaskLine } from './dashboard.jsx';
 import { NewTask } from './clients.jsx';
-import { industryById } from '../../shared/discovery/industries.js';
+import { industryName } from '../industries.jsx';
 
 export function Pipeline({ user }) {
   const { loading, data, error, reload } = useLoad('/sales/pipeline');
@@ -51,7 +51,7 @@ export function Pipeline({ user }) {
                   return (
                     <a class="deal" style="display:block;text-decoration:none" href={`/clients/${d.client_id}?tab=deals`} draggable onDragStart={() => setDragging(d)} onDragEnd={() => setDragging(null)}>
                       <div class="name">{d.client_name}</div>
-                      <div class="small muted">{industryById[d.industry]?.name || ''}</div>
+                      <div class="small muted">{industryName(d.industry)}</div>
                       <div class="row small mt" style="gap:8px">
                         {(d.setup_cents || d.monthly_cents) ? <span>{d.monthly_cents ? `${money(d.monthly_cents)}/mo` : money(d.setup_cents)}</span> : null}
                         {nd && <span class={nd.tone || 'faint'}>{nd.text}</span>}
