@@ -2,7 +2,7 @@
 import { Hono } from 'hono';
 import { fail, now, newId, text, cents, oneOf, readJson, logActivity, EMAIL_RE } from '../lib/util.js';
 import { requireUser, requireRole, requireClient, clientScopeSql, isStaff } from '../lib/auth.js';
-import { INDUSTRY_IDS } from '../../shared/discovery/industries.js';
+import { checkIndustry } from '../lib/industries.js';
 import { cleanCustomerId } from '../lib/google-ads.js';
 import { setAdsAccount } from './google-ads.js';
 
@@ -13,7 +13,7 @@ function clientFields(body, { partial = false } = {}) {
   const out = {};
   const set = (k, v) => { if (!partial || body[k] !== undefined) out[k] = v; };
   set('name', text(body.name, { max: 160, required: !partial || body.name !== undefined, label: 'Business name' }));
-  set('industry', body.industry ? oneOf(body.industry, [...INDUSTRY_IDS, 'other'], 'Industry') : null);
+  set('industry', body.industry ? String(body.industry) : null); // checked against the database by the caller
   set('website', normalizeUrl(body.website));
   set('phone', text(body.phone, { max: 40 }));
   set('email', body.email ? (EMAIL_RE.test(String(body.email).trim()) ? String(body.email).trim().toLowerCase() : fail(400, 'Enter a valid business email.')) : null);
@@ -83,6 +83,7 @@ r.post('/', async (c) => {
   const db = c.env.DB;
   const body = await readJson(c);
   const f = clientFields(body);
+  await checkIndustry(db, f.industry);
   const id = newId();
   const t = now();
   const stmts = [db.prepare(`INSERT INTO clients (id, name, industry, website, phone, email, address, city, state, zip, status, source, created_by, created_at, updated_at)
@@ -163,6 +164,7 @@ r.patch('/:id', async (c) => {
   const { user, client } = await requireClient(c, c.req.param('id'), { staffOnly: true });
   const body = await readJson(c);
   const f = clientFields(body, { partial: true });
+  if (f.industry) await checkIndustry(c.env.DB, f.industry);
   const keys = Object.keys(f);
   if (!keys.length) return c.json({ ok: true });
   await c.env.DB.prepare(`UPDATE clients SET ${keys.map((k) => `${k}=?`).join(', ')}, updated_at=? WHERE id=?`)

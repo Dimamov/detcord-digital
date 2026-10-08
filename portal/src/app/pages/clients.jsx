@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import { useLoad, api, navigate, toast, query, money, dollars, ago, date, dateTime, due, fromInputDate, STATUS_LABEL } from '../lib.js';
 import { Loading, ErrorBox, Empty, Icon, Field, Dialog, StatusBadge, Avatar, CopyButton, useAction } from '../ui.jsx';
-import { INDUSTRIES, INDUSTRY_GROUPS, industryById } from '../../shared/discovery/industries.js';
+import { IndustrySelect, industryName } from '../industries.jsx';
 import { SERVICE_CATEGORIES } from '../../shared/services.js';
 import { TaskLine } from './dashboard.jsx';
 import { ContractsTab } from './contracts.jsx';
@@ -11,20 +11,6 @@ import { AuditsTab } from './audits.jsx';
 import { GoatTab } from './goat.jsx';
 import { MeetingsTab } from './meetings.jsx';
 import { GoogleAdsCard } from './google-ads.jsx';
-
-export function IndustrySelect({ value, onChange, required }) {
-  return (
-    <select class="select" value={value || ''} required={required} onChange={(e) => onChange(e.target.value)}>
-      <option value="">Choose an industry…</option>
-      {INDUSTRY_GROUPS.map((g) => (
-        <optgroup label={g.name}>{INDUSTRIES.filter((i) => i.group === g.id).map((i) => <option value={i.id}>{i.name}</option>)}</optgroup>
-      ))}
-      <option value="other">Other</option>
-    </select>
-  );
-}
-
-const industryName = (id) => industryById[id]?.name || (id === 'other' ? 'Other' : '');
 
 // ---------- List ----------
 export function ClientsList({ user }) {

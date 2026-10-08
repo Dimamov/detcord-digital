@@ -4,7 +4,7 @@ import { fail, now, newId, sha256, randomToken, readJson, logActivity, EMAIL_RE 
 import { requireClient } from '../lib/auth.js';
 import { renderEmail, sendEmail } from '../lib/email.js';
 import { computeResult, intakeToAnswers, allQuestionIds, INTAKE } from '../../shared/discovery/engine.js';
-import { INDUSTRY_IDS } from '../../shared/discovery/industries.js';
+import { checkIndustry } from '../lib/industries.js';
 import { SERVICE_MODULES } from '../../shared/discovery/services.js';
 
 const r = new Hono();
@@ -36,7 +36,7 @@ r.post('/discoveries', async (c) => {
   const { user, client } = await requireClient(c, b.clientId, { staffOnly: true });
   const db = c.env.DB;
   const industry = b.industry || client.industry;
-  if (industry && !INDUSTRY_IDS.includes(industry) && industry !== 'other') fail(400, 'Choose a valid industry.');
+  await checkIndustry(db, industry);
   const modules = cleanModules(b.modules);
   // Pre-fill from the most recent submitted intake form, if any.
   const intake = await db.prepare('SELECT answers FROM intake_links WHERE client_id=? AND submitted_at IS NOT NULL ORDER BY submitted_at DESC LIMIT 1').bind(client.id).first();
@@ -66,7 +66,7 @@ r.get('/discoveries/:id', async (c) => {
 r.patch('/discoveries/:id', async (c) => {
   const { d } = await loadDiscovery(c, c.req.param('id'));
   const b = await readJson(c);
-  const industry = b.industry !== undefined ? (b.industry && (INDUSTRY_IDS.includes(b.industry) || b.industry === 'other') ? b.industry : fail(400, 'Choose a valid industry.')) : d.industry;
+  const industry = b.industry !== undefined ? await checkIndustry(c.env.DB, b.industry) : d.industry;
   const modules = b.modules !== undefined ? cleanModules(b.modules) : d.modules;
   const answers = { ...d.answers, ...cleanAnswers(b.answers, industry, modules) };
   await c.env.DB.prepare('UPDATE discoveries SET industry=?, modules=?, answers=?, updated_at=? WHERE id=?')
