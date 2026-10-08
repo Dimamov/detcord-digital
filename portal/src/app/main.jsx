@@ -16,6 +16,7 @@ import { FilesPage } from './pages/files.jsx';
 import { AuditPage, ReportPage } from './pages/audits.jsx';
 import { GoatPage, GoatRequestPage } from './pages/goat.jsx';
 import { MeetingPage } from './pages/meetings.jsx';
+import { SocialPage, SocialPostPage } from './pages/social.jsx';
 
 const PUBLIC = [
   ['/login', Login],
@@ -47,12 +48,14 @@ const PRIVATE = [
   ['/goat', GoatPage, ['admin', 'rep', 'client']],
   ['/goat/:id', GoatRequestPage, ['admin', 'rep', 'client']],
   ['/meetings/:id', MeetingPage, ['admin', 'rep']],
+  ['/social', SocialPage, ['client']],
+  ['/social/:id', SocialPostPage, ['admin', 'rep', 'client']],
 ];
 
 const NAV = {
   admin: [['/', 'home', 'Detcord Today'], ['/clients', 'clients', 'Clients'], ['/goat', 'bolt', 'Requests'], ['/pipeline', 'pipeline', 'Pipeline'], ['/tasks', 'tasks', 'Tasks'], ['/invoices', 'card', 'Invoices'], '|Agency', ['/team', 'team', 'Team'], ['/commissions', 'money', 'Commissions'], ['/settings', 'settings', 'Settings']],
   rep: [['/', 'home', 'My Day'], ['/clients', 'clients', 'My clients'], ['/goat', 'bolt', 'Requests'], ['/pipeline', 'pipeline', 'Pipeline'], ['/tasks', 'tasks', 'Tasks'], ['/invoices', 'card', 'Invoices'], ['/commissions', 'money', 'Commissions']],
-  client: [['/', 'home', 'Home'], ['/goat', 'bolt', 'Ask the GOAT'], ['/invoices', 'card', 'Invoices'], ['/files', 'folder', 'Files']],
+  client: [['/', 'home', 'Home'], ['/goat', 'bolt', 'Ask the GOAT'], ['/social', 'globe', 'Social'], ['/invoices', 'card', 'Invoices'], ['/files', 'folder', 'Files']],
 };
 
 function ThemeToggle() {

@@ -225,6 +225,9 @@ export function GoatRequestPage({ id, user }) {
       )}
 
       {staff && r.client_id && <StaffActions r={r} user={user} onDone={reload} />}
+      {staff && r.client_id && r.category === 'social' && ['approved', 'in_progress'].includes(r.status) && (
+        <p class="small"><a class="btn sm secondary" href={`/clients/${r.client_id}?tab=social&goat=${r.id}`}><Icon name="globe" size={14} />Write the social post</a> <span class="muted">The client approves the post itself before it goes out.</span></p>
+      )}
       {!staff && ['new', 'proposed', 'approved'].includes(r.status) && (
         <p class="small"><button class="btn sm ghost" onClick={async () => { if (!confirm('Cancel this request?')) return; try { await api('POST', `/goat/${r.id}/cancel`, {}); toast('Request cancelled.'); reload(); } catch (e) { toast(e.message, 'bad'); } }}>Cancel this request</button></p>
       )}
@@ -421,7 +424,7 @@ function MatchCard({ data, onDone }) {
   );
 }
 
-const EVENT_LABEL = { created: 'Request received', proposal: 'Plan', approved: 'Approved', change: 'Asked for changes', started: 'Work started', done: 'Done', failed: 'Closed', cancelled: 'Cancelled', matched: 'Sender confirmed', comment: '', note: 'Note' };
+const EVENT_LABEL = { created: 'Request received', proposal: 'Plan', approved: 'Approved', change: 'Asked for changes', started: 'Work started', done: 'Done', failed: 'Closed', cancelled: 'Cancelled', matched: 'Sender confirmed', comment: '', note: 'Note', social: 'Social post' };
 
 function Timeline({ r, events, staff, onDone }) {
   const [body, setBody] = useState('');

@@ -337,6 +337,7 @@ function PaymentSettings() {
         okText={() => 'PageSpeed and Places both answered.'} testNote="Runs one speed test and one Places search." />
       <GoatIntegrations />
       <GoogleAdsIntegration />
+      <ZernioIntegration />
       <section class="card">
         <div class="row between"><h2 style="margin:0">Email</h2><span class={`badge ${data.email.configured ? 'good' : 'bad'}`}>{data.email.configured ? 'Set up' : 'Not set up'}</span></div>
         <p class="muted" style="margin-bottom:0">{data.email.configured ? 'Invites, receipts and agreement notices are emailed from info@detcorddigital.com.' : 'Without email, invite links are shown to you to share by hand, and receipts are not sent. Bob sets this up in Task 2.'}</p>
@@ -368,6 +369,17 @@ function GoogleAdsIntegration() {
         </section>
       )}
     </>
+  );
+}
+
+// Zernio publishes approved social posts to clients' connected accounts.
+function ZernioIntegration() {
+  const { data } = useLoad('/settings/integrations/zernio');
+  if (!data) return null;
+  return (
+    <IntegrationCard title="Zernio (social posting)" item={data} task="Zernio setup" path="zernio"
+      about="Connects clients' Facebook, Instagram, Google Business, LinkedIn and X accounts and publishes posts after the client approves them. Without it, posts can be written and approved but not published."
+      okText={(t) => `Zernio answered (${t.profiles} profile${t.profiles === 1 ? '' : 's'}).`} testNote="Lists Zernio profiles. Nothing is posted." />
   );
 }
 
