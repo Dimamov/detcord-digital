@@ -3,6 +3,7 @@ import { Loading, ErrorBox, Empty, Avatar, Icon } from '../ui.jsx';
 import { session } from '../lib.js';
 import { ReportsCard } from './audits.jsx';
 import { GoatCard } from './goat.jsx';
+import { Board } from '../board.jsx';
 
 // The client workspace: what needs them (agreements to sign, invoices due), updates, services,
 // GOAT requests, reports, files and their Detcord team.
@@ -30,12 +31,10 @@ function BusinessView({ id, user, others }) {
       </div>
 
       <ActionItems />
-      <ReportsCard />
-
-      <GoatCard clientId={client.id} user={user} />
-
-      <div class="grid main-side">
-        <div class="stack">
+      <Board page="client-home" cards={[
+        { id: 'reports', title: 'Reports', col: 'top', node: <ReportsCard /> },
+        { id: 'goat', title: 'Ask the GOAT', col: 'top', node: <GoatCard clientId={client.id} user={user} /> },
+        { id: 'updates', title: 'Updates from Detcord', col: 'main', node: (
           <section class="card">
             <h2>Updates from Detcord</h2>
             {notes.length ? (
@@ -49,17 +48,21 @@ function BusinessView({ id, user, others }) {
               </div>
             ) : <Empty title="No updates yet">Your team will post updates here.</Empty>}
           </section>
+        ) },
+        { id: 'services', title: 'Your services', col: 'main', node: (
           <section class="card">
             <h2>Your services</h2>
             {services.length ? services.map((s) => <div class="row between" style="padding:8px 0;border-bottom:1px solid var(--line)"><span>{s.name}</span><span class="badge good">Active</span></div>)
               : <p class="muted">Services appear here once they start.</p>}
           </section>
+        ) },
+        { id: 'files', title: 'Files and photos', col: 'main', node: (
           <section class="card">
             <div class="row between"><h2 style="margin:0">Files and photos</h2><a class="btn sm secondary" href="/files"><Icon name="upload" />Share files</a></div>
             <p class="small muted" style="margin-bottom:0">Send logos, photos and flyers for your website, social posts and requests. Your Detcord team sees them right away.</p>
           </section>
-        </div>
-        <div class="stack">
+        ) },
+        { id: 'team', title: 'Your Detcord team', col: 'side', node: (
           <section class="card">
             <h2>Your Detcord team</h2>
             {team.length ? team.map((t) => (
@@ -71,6 +74,8 @@ function BusinessView({ id, user, others }) {
               </div>
             )) : <p class="muted">Reach us at <a href="mailto:info@detcorddigital.com">info@detcorddigital.com</a>.</p>}
           </section>
+        ) },
+        { id: 'details', title: 'Business details', col: 'side', node: (
           <section class="card">
             <h2>Business details</h2>
             <dl class="kv">
@@ -80,9 +85,9 @@ function BusinessView({ id, user, others }) {
             </dl>
             <p class="small faint mt">Something out of date? Tell your Detcord team.</p>
           </section>
-          {others.length > 0 && <section class="card"><h2>Other businesses</h2>{others.map((o) => <div>{o.name}</div>)}</section>}
-        </div>
-      </div>
+        ) },
+        { id: 'others', title: 'Other businesses', col: 'side', node: others.length > 0 && <section class="card"><h2>Other businesses</h2>{others.map((o) => <div>{o.name}</div>)}</section> },
+      ]} />
     </div>
   );
 }

@@ -338,3 +338,21 @@ tr.me td { background: var(--accent-soft); }
   .card, .finding { break-inside: avoid; box-shadow: none; }
   .report-cta .btn { border: 1px solid #999; }
 }
+
+/* Customizable dashboards */
+.board-tools { margin: -8px 0 10px; min-height: 32px; }
+.board-card:empty { display: none; }
+.board-col.editing { min-height: 90px; padding: 10px; border: 1px dashed var(--line-strong); border-radius: var(--radius); }
+.board-col-label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.board-bar { display: flex; align-items: center; gap: 6px; padding: 6px 8px; margin-bottom: 6px; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.board-title { flex: 1; min-width: 0; font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.board-handle { cursor: grab; touch-action: none; border: 0; background: transparent; color: var(--muted); font-size: 18px; line-height: 1; padding: 4px 6px; border-radius: 6px; }
+.board-handle:hover { background: var(--surface-3); color: var(--text); }
+.dash.is-dragging, .dash.is-dragging * { cursor: grabbing !important; user-select: none; }
+.board-preview { max-height: 180px; overflow: hidden; pointer-events: none; opacity: .75; -webkit-mask-image: linear-gradient(#000 70%, transparent); mask-image: linear-gradient(#000 70%, transparent); }
+.board-card.dragging { opacity: .35; }
+.board-card.drop-before, .board-empty.drop-before { box-shadow: 0 -3px 0 0 var(--accent); }
+.board-card.drop-after { box-shadow: 0 3px 0 0 var(--accent); }
+.board-empty { padding: 18px; text-align: center; color: var(--faint, var(--muted)); font-size: 13px; }
+.board-hidden { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; padding: 10px 12px; }
+.board-card .card.mb { margin-bottom: 0; }

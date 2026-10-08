@@ -1,6 +1,7 @@
 import { useLoad, money, ago, due, dateTime, api, toast } from '../lib.js';
 import { Loading, ErrorBox, Empty, Icon, StatusBadge } from '../ui.jsx';
 import { ClientHome } from './client-home.jsx';
+import { Board } from '../board.jsx';
 
 export function Dashboard({ user }) {
   if (user.role === 'client') return <ClientHome user={user} />;
@@ -55,6 +56,8 @@ function StaffDay({ user }) {
         </div>
       </div>
 
+      <Board page="staff-home" cards={[
+        { id: 'stats', title: 'Numbers', col: 'top', node: (
       <div class="grid four mb">
         {admin ? <>
           <a class="stat" href="/clients?status=active"><div class="label">Active clients</div><div class="value">{counts.active_clients}</div></a>
@@ -68,24 +71,23 @@ function StaffDay({ user }) {
           <a class="stat" href="/commissions"><div class="label">Commissions</div><div class="value"><Icon name="money" size={22} /></div><div class="hint">See earnings</div></a>
         </>}
       </div>
-
-      {admin && <section class="card mb">
+        ) },
+        { id: 'email', title: 'Email delivery', col: 'top', node: admin && (<section class="card">
         <h2>Email delivery</h2>
         {!data.emailTrackingReady && <div class="alert warn">Delivery tracking needs its Resend webhook connected. Accepted means the provider accepted the message; delivery is not yet confirmed.</div>}
         {data.emails?.length ? <div class="list">{data.emails.map((e) => <div class="list-item" key={e.id}>
           <div style="flex:1;min-width:0"><div class="title">{e.recipient}</div><div class="meta">{e.subject} · {ago(e.created_at)}</div>{e.error && <div class="small">{e.error}</div>}</div>
           <span class={`badge ${e.status === 'delivered' ? 'good' : ['bounced','failed','suppressed','not_configured'].includes(e.status) ? 'bad' : 'warn'}`}>{e.status === 'accepted' ? 'Accepted — awaiting delivery' : e.status.replaceAll('_', ' ')}</span>
         </div>)}</div> : <p class="muted">New emails will appear here. Failed deliveries also appear in Recent activity.</p>}
-      </section>}
-      <div class="grid main-side">
-        <div class="stack">
+      </section>) },
+        { id: 'tasks', title: 'Follow-ups due', col: 'main', node: (
           <section class="card">
             <div class="card-head"><h2>Follow-ups due</h2><a class="small muted" href="/tasks">All tasks</a></div>
             {allTasks.length ? allTasks.map((t) => <TaskLine t={t} onDone={done} />)
               : <Empty title="You’re caught up">{tasks.upcoming.length ? `${tasks.upcoming.length} coming up this week.` : 'No follow-ups scheduled.'}</Empty>}
           </section>
-
-          {(intakesNew.length > 0 || discoveriesOpen.length > 0) && (
+        ) },
+        { id: 'discovery', title: 'Discovery', col: 'main', node: (intakesNew.length > 0 || discoveriesOpen.length > 0) && (
             <section class="card">
               <h2>Discovery</h2>
               <div class="list">
@@ -105,8 +107,8 @@ function StaffDay({ user }) {
                 ))}
               </div>
             </section>
-          )}
-
+          ) },
+        { id: 'stale', title: 'Deals going quiet', col: 'main', node: (
           <section class="card">
             <div class="card-head"><h2>Deals going quiet</h2><a class="small muted" href="/pipeline">Pipeline</a></div>
             {stale.length ? (
@@ -120,8 +122,8 @@ function StaffDay({ user }) {
               </div>
             ) : <Empty title="No stalled deals">Every open deal has had activity this week.</Empty>}
           </section>
-
-          {admin && data.activity.length > 0 && (
+        ) },
+        { id: 'activity', title: 'Recent activity', col: 'main', node: admin && data.activity.length > 0 && (
             <section class="card">
               <h2>Recent activity</h2>
               <div class="list">
@@ -135,10 +137,8 @@ function StaffDay({ user }) {
                 ))}
               </div>
             </section>
-          )}
-        </div>
-
-        <div class="stack">
+          ) },
+        { id: 'pipeline', title: 'Pipeline', col: 'side', node: (
           <section class="card">
             <h2>Pipeline</h2>
             <div class="stack tight">
@@ -150,8 +150,8 @@ function StaffDay({ user }) {
               ))}
             </div>
           </section>
-
-          {admin && data.team.length > 0 && (
+        ) },
+        { id: 'team', title: 'Sales team', col: 'side', node: admin && data.team.length > 0 && (
             <section class="card">
               <div class="card-head"><h2>Sales team</h2><a class="small muted" href="/team">Manage</a></div>
               <div class="list">
@@ -163,9 +163,8 @@ function StaffDay({ user }) {
                 ))}
               </div>
             </section>
-          )}
-
-          {admin && (data.invites.length > 0 || counts.unassigned > 0) && (
+          ) },
+        { id: 'attention', title: 'Needs attention', col: 'side', node: admin && (data.invites.length > 0 || counts.unassigned > 0) && (
             <section class="card">
               <h2>Needs attention</h2>
               <div class="stack tight">
@@ -178,9 +177,8 @@ function StaffDay({ user }) {
                 ))}
               </div>
             </section>
-          )}
-        </div>
-      </div>
+          ) },
+      ]} />
     </div>
   );
 }
