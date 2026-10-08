@@ -49,10 +49,16 @@ deploys staging and applies migrations. It skips the deploy until the `CLOUDFLAR
 | Secret | Needed for | Without it |
 | --- | --- | --- |
 | `BOOTSTRAP_TOKEN` | creating the first admin | bootstrap returns 404 |
-| `RESEND_API_KEY` | invite, reset and pre-call emails | admins get a link to share by hand |
+| `RESEND_API_KEY` | invite, reset, agreement, invoice and receipt emails | admins get a link to share by hand; no receipts |
+| `CLOVER_MERCHANT_ID`, `CLOVER_PRIVATE_TOKEN`, `CLOVER_WEBHOOK_SECRET` | online invoice payments (Clover Hosted Checkout) | invoices show "online payment not set up"; admins can record manual payments |
 
-Later phases add Clover, Twilio, Anthropic, Google and Zernio secrets. No integration shows as connected
-until a real call to it has succeeded.
+Add them in Cloudflare under **Workers & Pages → (worker) → Settings → Variables and Secrets** (type Secret).
+`CLOVER_API_BASE` is a plain var: sandbox on staging, `https://api.clover.com` in production. Clover's webhook
+URL is `<portal URL>/api/webhooks/clover`. **Settings → Payments** shows the Clover state and has a
+**Test connection** button. Clover only shows as connected after that test succeeds.
+
+Files are stored in R2 (`MEDIA` binding: `detcord-portal-media-staging` / `detcord-portal-media`). Wrangler
+creates the bucket on the first deploy. Later phases add Twilio, Anthropic, Google and Zernio secrets.
 
 ## Security rules the code enforces
 
@@ -62,3 +68,9 @@ until a real call to it has succeeded.
   from the same origin.
 - Invite and reset links are single-use and hashed at rest. Sending a new link cancels the old one.
 - API responses are `no-store` and `noindex`.
+- Clients only see agreements after they are sent, and only see invoices after they are issued. Files marked
+  internal are invisible to clients, and they get the same 404 as a missing file.
+- Sending an agreement freezes the document and stores its SHA-256. A signature must match that hash, and a
+  database trigger blocks any change to a signed agreement.
+- Invoices are marked paid only by Clover's signed webhook (HMAC-SHA256, `Clover-Signature`) or by an admin
+  recording a manual payment. Repeated webhooks are recorded once.

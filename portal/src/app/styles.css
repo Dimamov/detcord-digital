@@ -262,3 +262,25 @@ tr.click:hover td { background: var(--surface-2); }
 .task input { margin-top: 4px; width: 18px; height: 18px; accent-color: var(--accent); flex: none; }
 .task.done .t { text-decoration: line-through; color: var(--faint); }
 .overdue { color: var(--bad); }
+
+/* ---- Phase B: agreements, billing, files ---- */
+.doc-frame { width: 100%; height: 70vh; border: 1px solid var(--line); border-radius: var(--radius); background: #fff; }
+.dialog:has(.doc-frame) { width: min(980px, 100%); }
+.svc-row { padding: 14px 0; border-bottom: 1px solid var(--line); }
+.svc-row:first-of-type { padding-top: 4px; }
+.linkish { background: none; border: 0; padding: 0; color: var(--accent-2); font: inherit; font-weight: 600; cursor: pointer; text-decoration: underline; }
+tr.clickable { cursor: pointer; }
+tr.clickable:hover td { background: var(--surface-2); }
+.attention { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.dropzone { display: grid; justify-items: center; gap: 6px; text-align: center; padding: 26px 16px; border: 2px dashed var(--line-strong); border-radius: var(--radius); color: var(--muted); }
+.dropzone.over { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
+.progress { height: 6px; border-radius: 99px; background: var(--surface-3); overflow: hidden; margin-top: 6px; }
+.progress > div { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .2s; }
+.file-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 14px; }
+.file { min-width: 0; }
+.file .thumb { position: relative; display: grid; place-items: center; aspect-ratio: 4 / 3; border-radius: var(--radius-sm); background: var(--surface-2); border: 1px solid var(--line); overflow: hidden; color: var(--faint); }
+.file .thumb img { width: 100%; height: 100%; object-fit: cover; }
+.file.picked .thumb { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.file .pick-mark { position: absolute; top: 6px; right: 6px; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--accent-ink); }
+.file .name { margin-top: 6px; font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 900px) { aside[style*="sticky"] { position: static !important; } .doc-frame { height: 60vh; } }

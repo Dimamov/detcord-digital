@@ -7,7 +7,7 @@ export default defineConfig({
   plugins: [
     cloudflareTest({
       wrangler: { configPath: './wrangler.jsonc' },
-      miniflare: { bindings: { TEST_MIGRATIONS: migrations, RESEND_API_KEY: '' } },
+      miniflare: { bindings: { TEST_MIGRATIONS: migrations, RESEND_API_KEY: '', CLOVER_MERCHANT_ID: 'TESTMERCHANT', CLOVER_PRIVATE_TOKEN: 'test-private-token', CLOVER_WEBHOOK_SECRET: 'test-webhook-secret', CLOVER_API_BASE: 'https://apisandbox.dev.clover.com' } },
     }),
   ],
   test: { setupFiles: ['./test/apply-migrations.js'], include: ['test/**/*.test.js'] },

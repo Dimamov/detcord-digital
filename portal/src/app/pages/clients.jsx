@@ -4,6 +4,9 @@ import { Loading, ErrorBox, Empty, Icon, Field, Dialog, StatusBadge, Avatar, Cop
 import { INDUSTRIES, INDUSTRY_GROUPS, industryById } from '../../shared/discovery/industries.js';
 import { SERVICE_CATEGORIES } from '../../shared/services.js';
 import { TaskLine } from './dashboard.jsx';
+import { ContractsTab } from './contracts.jsx';
+import { BillingTab } from './billing.jsx';
+import { FilesPanel } from './files.jsx';
 
 export function IndustrySelect({ value, onChange, required }) {
   return (
@@ -144,7 +147,7 @@ export function NewClient({ user }) {
 }
 
 // ---------- Client record ----------
-const TABS = [['overview', 'Overview'], ['discovery', 'Discovery'], ['deals', 'Deals'], ['tasks', 'Tasks'], ['notes', 'Notes'], ['access', 'Portal access']];
+const TABS = [['overview', 'Overview'], ['discovery', 'Discovery'], ['deals', 'Deals'], ['contracts', 'Agreements'], ['billing', 'Billing'], ['files', 'Files'], ['tasks', 'Tasks'], ['notes', 'Notes'], ['access', 'Portal access']];
 
 export function ClientRecord({ id, user }) {
   if (user.role === 'client') return <ClientOwnRecord id={id} />;
@@ -185,6 +188,9 @@ function StaffClientRecord({ id, user }) {
       {tab === 'tasks' && <TasksTab data={data} user={user} reload={reload} />}
       {tab === 'notes' && <NotesTab data={data} user={user} reload={reload} />}
       {tab === 'access' && <AccessTab data={data} user={user} reload={reload} />}
+      {tab === 'contracts' && <ContractsTab clientId={c.id} user={user} />}
+      {tab === 'billing' && <BillingTab clientId={c.id} user={user} />}
+      {tab === 'files' && <FilesPanel clientId={c.id} user={user} />}
     </div>
   );
 }

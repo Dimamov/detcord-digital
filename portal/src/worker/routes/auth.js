@@ -152,8 +152,9 @@ r.post('/bootstrap', async (c) => {
   await db.prepare("INSERT INTO users (id, email, name, role, status, created_at) VALUES (?,?,?,?,'invited',?)")
     .bind(user.id, email, name, 'admin', now()).run();
   const link = await issueLink(c, user, 'invite');
-  // The bootstrap caller holds the deploy secret, so returning the link is acceptable here.
-  return c.json({ ok: true, delivery: link.delivery, setupUrl: link.url });
+  // When the email went out, the link stays in the inbox. Otherwise the caller holds the
+  // deploy secret, so handing it the link directly is acceptable.
+  return c.json({ ok: true, delivery: link.delivery, ...(link.delivery === 'sent' ? {} : { setupUrl: link.url }) });
 });
 
 export default r;

@@ -7,6 +7,9 @@ import clients from './routes/clients.js';
 import sales from './routes/sales.js';
 import discovery from './routes/discovery.js';
 import home from './routes/home.js';
+import contracts from './routes/contracts.js';
+import billing from './routes/billing.js';
+import media from './routes/media.js';
 
 const app = new Hono();
 
@@ -33,6 +36,9 @@ app.route('/api/clients', clients);
 app.route('/api/sales', sales);
 app.route('/api', discovery);
 app.route('/api', home);
+app.route('/api', contracts);
+app.route('/api', billing);
+app.route('/api', media);
 
 app.all('/api/*', (c) => c.json({ error: 'Not found.' }, 404));
 
@@ -47,7 +53,8 @@ export default {
     const res = await app.fetch(request, env, ctx);
     const out = new Response(res.body, res);
     out.headers.set('X-Content-Type-Options', 'nosniff');
-    out.headers.set('X-Frame-Options', 'DENY');
+    // The contract viewer opts in to same-origin framing; everything else stays unframeable.
+    if (!out.headers.has('X-Frame-Options')) out.headers.set('X-Frame-Options', 'DENY');
     out.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
     out.headers.set('Strict-Transport-Security', 'max-age=31536000');
     out.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');

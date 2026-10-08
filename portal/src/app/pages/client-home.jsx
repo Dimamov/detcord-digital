@@ -1,9 +1,9 @@
-import { useLoad, date } from '../lib.js';
+import { useLoad, date, money } from '../lib.js';
 import { Loading, ErrorBox, Empty, Avatar, Icon } from '../ui.jsx';
 import { session } from '../lib.js';
 
-// The client workspace. Phase A shows business info, the Detcord team and shared updates.
-// GOAT Command, files, contracts, invoices and reports arrive in later phases and are
+// The client workspace: what needs them (agreements to sign, invoices due), updates, services,
+// files and their Detcord team. GOAT Command and reports arrive in later phases and are
 // shown as "coming soon" rather than as working buttons.
 export function ClientHome({ user }) {
   const businesses = session.value?.clients || [];
@@ -37,6 +37,8 @@ function BusinessView({ id, user, others }) {
         <span class="badge">Coming soon</span>
       </section>
 
+      <ActionItems />
+
       <div class="grid main-side">
         <div class="stack">
           <section class="card">
@@ -58,12 +60,12 @@ function BusinessView({ id, user, others }) {
               : <p class="muted">Services appear here once they start.</p>}
           </section>
           <section class="card">
-            <h2>Coming to your portal</h2>
-            <div class="grid two">
-              {[['Contracts', 'Review and sign agreements online.'], ['Invoices', 'See balances and pay securely.'], ['Files and photos', 'Share logos, photos and flyers with your team.'], ['Reports', 'Plain-English results with a game plan.']].map(([t, d]) => (
-                <div style="padding:12px;border:1px dashed var(--line-strong);border-radius:10px"><strong>{t}</strong><div class="small muted">{d}</div></div>
-              ))}
-            </div>
+            <div class="row between"><h2 style="margin:0">Files and photos</h2><a class="btn sm secondary" href="/files"><Icon name="upload" />Share files</a></div>
+            <p class="small muted" style="margin-bottom:0">Send logos, photos and flyers for your website, social posts and requests. Your Detcord team sees them right away.</p>
+          </section>
+          <section class="card" style="border-style:dashed">
+            <strong>Reports</strong> <span class="badge">Coming soon</span>
+            <div class="small muted">Plain-English results with a game plan.</div>
           </section>
         </div>
         <div class="stack">
@@ -91,5 +93,35 @@ function BusinessView({ id, user, others }) {
         </div>
       </div>
     </div>
+  );
+}
+
+// Agreements waiting for a signature and invoices with a balance, front and center.
+function ActionItems() {
+  const contracts = useLoad('/contracts');
+  const invoices = useLoad('/invoices');
+  const toSign = (contracts.data?.contracts || []).filter((c) => c.status === 'sent');
+  const due = (invoices.data?.invoices || []).filter((i) => i.status === 'open');
+  if (!toSign.length && !due.length) return null;
+  return (
+    <section class="card mb attention">
+      <h2>Needs your attention</h2>
+      <div class="list">
+        {toSign.map((c) => (
+          <a class="list-item" href={`/contracts/${c.id}`}>
+            <Icon name="pen" />
+            <div style="flex:1"><div class="title">Review and sign: {c.title}</div><div class="meta">Sent {date(c.issued_at)}</div></div>
+            <span class="btn sm">Review</span>
+          </a>
+        ))}
+        {due.map((i) => (
+          <a class="list-item" href={`/invoices/${i.id}`}>
+            <Icon name="card" />
+            <div style="flex:1"><div class="title">{i.title}</div><div class="meta">{i.number} · due {date(i.due_at)}</div></div>
+            <strong>{money(i.total_cents - i.paid_cents)}</strong>
+          </a>
+        ))}
+      </div>
+    </section>
   );
 }

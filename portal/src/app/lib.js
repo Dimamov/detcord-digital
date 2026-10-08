@@ -23,7 +23,7 @@ export async function api(method, path, body) {
     session.value = { user: null, clients: [] };
     navigate('/login');
   }
-  if (!res.ok) throw new ApiError(res.status, data.error || 'Something went wrong.');
+  if (!res.ok) { const err = new ApiError(res.status, data.error || 'Something went wrong.'); err.data = data; throw err; }
   return data;
 }
 

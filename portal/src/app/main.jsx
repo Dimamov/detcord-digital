@@ -10,6 +10,9 @@ import { Pipeline, Tasks } from './pages/pipeline.jsx';
 import { DiscoveryRunner } from './pages/discovery.jsx';
 import { Team, Settings, Commissions } from './pages/admin.jsx';
 import { Account } from './pages/account.jsx';
+import { ContractPage } from './pages/contracts.jsx';
+import { InvoicesPage, InvoicePage } from './pages/billing.jsx';
+import { FilesPage } from './pages/files.jsx';
 
 const PUBLIC = [
   ['/login', Login],
@@ -32,12 +35,16 @@ const PRIVATE = [
   ['/settings', Settings, ['admin']],
   ['/commissions', Commissions, ['admin', 'rep']],
   ['/account', Account, ['admin', 'rep', 'client']],
+  ['/contracts/:id', ContractPage, ['admin', 'rep', 'client']],
+  ['/invoices', InvoicesPage, ['admin', 'rep', 'client']],
+  ['/invoices/:id', InvoicePage, ['admin', 'rep', 'client']],
+  ['/files', FilesPage, ['client']],
 ];
 
 const NAV = {
-  admin: [['/', 'home', 'Detcord Today'], ['/clients', 'clients', 'Clients'], ['/pipeline', 'pipeline', 'Pipeline'], ['/tasks', 'tasks', 'Tasks'], '|Agency', ['/team', 'team', 'Team'], ['/commissions', 'money', 'Commissions'], ['/settings', 'settings', 'Settings']],
-  rep: [['/', 'home', 'My Day'], ['/clients', 'clients', 'My clients'], ['/pipeline', 'pipeline', 'Pipeline'], ['/tasks', 'tasks', 'Tasks'], ['/commissions', 'money', 'Commissions']],
-  client: [['/', 'home', 'Home']],
+  admin: [['/', 'home', 'Detcord Today'], ['/clients', 'clients', 'Clients'], ['/pipeline', 'pipeline', 'Pipeline'], ['/tasks', 'tasks', 'Tasks'], ['/invoices', 'card', 'Invoices'], '|Agency', ['/team', 'team', 'Team'], ['/commissions', 'money', 'Commissions'], ['/settings', 'settings', 'Settings']],
+  rep: [['/', 'home', 'My Day'], ['/clients', 'clients', 'My clients'], ['/pipeline', 'pipeline', 'Pipeline'], ['/tasks', 'tasks', 'Tasks'], ['/invoices', 'card', 'Invoices'], ['/commissions', 'money', 'Commissions']],
+  client: [['/', 'home', 'Home'], ['/invoices', 'card', 'Invoices'], ['/files', 'folder', 'Files']],
 };
 
 function ThemeToggle() {

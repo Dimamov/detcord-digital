@@ -246,43 +246,73 @@ r.delete('/commission-rules/:id', async (c) => {
   return c.json({ ok: true });
 });
 
-// Computes commission lines from won deals. Contract/invoice triggers activate once those modules exist.
-export function computeCommissions(rules, deals) {
+// Computes commission lines. Each rule pays on its trigger:
+// deal_won → won deals; contract_signed → signed agreements; invoice_paid → each paid invoice.
+// `events` = { deals, contracts, invoices } with owner_id/owner set to the rep credited.
+export function computeCommissions(rules, events) {
+  const { deals = [], contracts = [], invoices = [] } = Array.isArray(events) ? { deals: events } : events;
   const lines = [];
-  for (const deal of deals) {
-    for (const rule of rules) {
-      if (!rule.active || rule.trigger !== 'deal_won') continue;
-      if (rule.rep_id && rule.rep_id !== deal.owner_id) continue;
-      const setup = rule.basis !== 'monthly' ? deal.setup_cents || 0 : 0;
-      const monthlyBase = rule.basis !== 'setup' ? (deal.monthly_cents || 0) * (rule.months || 1) : 0;
-      const base = setup + monthlyBase;
-      lines.push({
-        dealId: deal.id, dealTitle: deal.title, clientId: deal.client_id, clientName: deal.client_name,
-        repId: deal.owner_id, repName: deal.owner, wonAt: deal.closed_at,
-        ruleId: rule.id, ruleName: rule.name, rateBps: rule.rate_bps,
-        baseCents: base, amountCents: Math.round((base * rule.rate_bps) / 10000),
-        provisional: !rule.approved,
-        explanation: `${(rule.rate_bps / 100).toFixed(2)}% of ${rule.basis === 'setup' ? 'setup' : rule.basis === 'monthly' ? `monthly × ${rule.months || 1} mo` : `setup + monthly × ${rule.months || 1} mo`}`,
-      });
+  const pct = (rule) => `${(rule.rate_bps / 100).toFixed(2)}%`;
+  const push = (rule, src, base, explanation) => lines.push({
+    ...src, ruleId: rule.id, ruleName: rule.name, trigger: rule.trigger, rateBps: rule.rate_bps,
+    baseCents: base, amountCents: Math.round((base * rule.rate_bps) / 10000), provisional: !rule.approved, explanation,
+  });
+  for (const rule of rules) {
+    if (!rule.active) continue;
+    const mine = (x) => !rule.rep_id || rule.rep_id === x.owner_id;
+    const months = rule.months || 1;
+    const termBase = (setup, monthly) => (rule.basis !== 'monthly' ? setup || 0 : 0) + (rule.basis !== 'setup' ? (monthly || 0) * months : 0);
+    const termText = rule.basis === 'setup' ? 'setup' : rule.basis === 'monthly' ? `monthly × ${months} mo` : `setup + monthly × ${months} mo`;
+    if (rule.trigger === 'deal_won') {
+      for (const d of deals.filter(mine)) {
+        push(rule, { source: 'deal', dealId: d.id, dealTitle: d.title, clientId: d.client_id, clientName: d.client_name, repId: d.owner_id, repName: d.owner, wonAt: d.closed_at },
+          termBase(d.setup_cents, d.monthly_cents), `${pct(rule)} of ${termText} on a won deal`);
+      }
+    } else if (rule.trigger === 'contract_signed') {
+      for (const ct of contracts.filter(mine)) {
+        push(rule, { source: 'contract', contractId: ct.id, dealTitle: `${ct.number}: ${ct.title}`, clientId: ct.client_id, clientName: ct.client_name, repId: ct.owner_id, repName: ct.owner, wonAt: ct.signed_at },
+          termBase(ct.setup_cents, ct.monthly_cents), `${pct(rule)} of ${termText} on a signed agreement`);
+      }
+    } else if (rule.trigger === 'invoice_paid') {
+      for (const inv of invoices.filter(mine)) {
+        const base = rule.basis === 'setup' ? (inv.kind === 'monthly' ? 0 : inv.paid_cents) : rule.basis === 'monthly' ? (inv.kind === 'monthly' ? inv.paid_cents : 0) : inv.paid_cents;
+        if (!base) continue;
+        push(rule, { source: 'invoice', invoiceId: inv.id, dealTitle: `${inv.number}: ${inv.title}`, clientId: inv.client_id, clientName: inv.client_name, repId: inv.owner_id, repName: inv.owner, wonAt: inv.paid_at },
+          base, `${pct(rule)} of ${rule.basis === 'both' ? 'the' : rule.basis} amount paid on this invoice`);
+      }
     }
   }
-  return lines;
+  return lines.sort((a, b) => (b.wonAt || 0) - (a.wonAt || 0));
 }
 
 r.get('/commissions', async (c) => {
   const user = requireRole(c, 'admin', 'rep');
   const db = c.env.DB;
+  const repFilter = user.role === 'rep' ? 'AND owner_id=?' : '';
+  const binds = user.role === 'rep' ? [user.id] : [];
   const rules = (await db.prepare('SELECT * FROM commission_rules').all()).results;
-  const deals = (await db.prepare(`SELECT d.*, cl.name AS client_name, u.name AS owner FROM deals d JOIN pipeline_stages ps ON ps.id=d.stage_id
-    JOIN clients cl ON cl.id=d.client_id LEFT JOIN users u ON u.id=d.owner_id WHERE ps.outcome='won' ${user.role === 'rep' ? 'AND d.owner_id=?' : ''}`)
-    .bind(...(user.role === 'rep' ? [user.id] : [])).all()).results;
-  const lines = computeCommissions(rules, deals);
-  const pending = rules.filter((r2) => r2.active && r2.trigger !== 'deal_won').map((r2) => r2.name);
+  const deals = (await db.prepare(`SELECT * FROM (SELECT d.*, cl.name AS client_name, u.name AS owner FROM deals d JOIN pipeline_stages ps ON ps.id=d.stage_id
+    JOIN clients cl ON cl.id=d.client_id LEFT JOIN users u ON u.id=d.owner_id WHERE ps.outcome='won') WHERE 1=1 ${repFilter}`).bind(...binds).all()).results;
+  // The rep credited for an agreement is its deal owner, else whoever sent it.
+  const contractRows = (await db.prepare(`SELECT * FROM (SELECT ct.id, ct.number, ct.title, ct.client_id, ct.signed_at, ct.data, cl.name AS client_name,
+      COALESCE(d.owner_id, ct.issued_by) AS owner_id, u.name AS owner
+    FROM contracts ct JOIN clients cl ON cl.id=ct.client_id LEFT JOIN deals d ON d.id=ct.deal_id LEFT JOIN users u ON u.id=COALESCE(d.owner_id, ct.issued_by)
+    WHERE ct.status='signed') WHERE 1=1 ${repFilter}`).bind(...binds).all()).results;
+  const contracts = contractRows.map(({ data, ...ct }) => {
+    const svc = JSON.parse(data).services || [];
+    return { ...ct, setup_cents: svc.reduce((n, s) => n + (s.setupCents || 0), 0), monthly_cents: svc.reduce((n, s) => n + (s.monthlyCents || 0), 0) };
+  });
+  const invoices = (await db.prepare(`SELECT * FROM (SELECT i.id, i.number, i.title, i.kind, i.client_id, i.paid_cents, i.paid_at, cl.name AS client_name,
+      COALESCE(d.owner_id, (SELECT a.user_id FROM assignments a WHERE a.client_id=i.client_id ORDER BY a.created_at LIMIT 1)) AS owner_id, u.name AS owner
+    FROM invoices i JOIN clients cl ON cl.id=i.client_id LEFT JOIN contracts ct ON ct.id=i.contract_id LEFT JOIN deals d ON d.id=ct.deal_id
+    LEFT JOIN users u ON u.id=COALESCE(d.owner_id, (SELECT a.user_id FROM assignments a WHERE a.client_id=i.client_id ORDER BY a.created_at LIMIT 1))
+    WHERE i.status='paid') WHERE 1=1 ${repFilter}`).bind(...binds).all()).results;
+  const lines = computeCommissions(rules, { deals, contracts, invoices });
   return c.json({
     lines,
     totalCents: lines.reduce((s, l) => s + l.amountCents, 0),
     anyProvisional: lines.some((l) => l.provisional) || !rules.some((r2) => r2.approved),
-    notYetCalculated: pending.length ? `Rules triggered by signed contracts or paid invoices (${pending.join(', ')}) start calculating once those modules are live.` : null,
+    notYetCalculated: null,
   });
 });
 

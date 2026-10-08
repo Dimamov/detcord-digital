@@ -1,5 +1,5 @@
 import { useState } from 'preact/hooks';
-import { useLoad, api, toast, money, dollars, ago, date } from '../lib.js';
+import { useLoad, api, toast, money, dollars, ago, date, dateTime, query } from '../lib.js';
 import { Loading, ErrorBox, Empty, Icon, Field, Dialog, Avatar, useAction } from '../ui.jsx';
 import { InviteResult } from './clients.jsx';
 import { SERVICE_CATEGORIES } from '../../shared/services.js';
@@ -88,13 +88,15 @@ export function Team({ user }) {
 
 // ---------- Settings ----------
 export function Settings() {
-  const [tab, setTab] = useState('services');
+  const [tab, setTab] = useState(query().tab || 'services');
   return (
     <div class="page">
       <div class="page-head"><div><div class="eyebrow">Agency</div><h1>Settings</h1></div></div>
       <div class="tabs">
-        {[['services', 'Services and prices'], ['pipeline', 'Pipeline stages'], ['commissions', 'Commission rules']].map(([k, l]) => <button aria-selected={tab === k} onClick={() => setTab(k)}>{l}</button>)}
+        {[['services', 'Services and prices'], ['pipeline', 'Pipeline stages'], ['commissions', 'Commission rules'], ['company', 'Company'], ['payments', 'Payments']].map(([k, l]) => <button aria-selected={tab === k} onClick={() => setTab(k)}>{l}</button>)}
       </div>
+      {tab === 'company' && <CompanySettings />}
+      {tab === 'payments' && <PaymentSettings />}
       {tab === 'services' && <ServicesSettings />}
       {tab === 'pipeline' && <StageSettings />}
       {tab === 'commissions' && <CommissionSettings />}
@@ -267,6 +269,65 @@ export function Commissions({ user }) {
           </table>
         ) : <Empty title="No commissions yet">{user.role === 'admin' ? 'Add rules in Settings, then mark deals Won.' : 'Commissions appear here when your deals are won.'}</Empty>}
       </div>
+    </div>
+  );
+}
+
+// Legal details printed on every agreement.
+function CompanySettings() {
+  const { loading, data, error, reload } = useLoad('/settings/company');
+  const [form, setForm] = useState(null);
+  const act = useAction();
+  if (loading) return <Loading />;
+  if (error) return <ErrorBox error={error} retry={reload} />;
+  const f = form || { legalName: '', address: '', signer: '', email: 'info@detcorddigital.com', ...data.company };
+  const save = (e) => { e.preventDefault(); act.run(async () => { await api('PUT', '/settings/company', f); toast('Company details saved.'); reload(); }); };
+  return (
+    <form class="card stack" style="max-width:640px" onSubmit={save}>
+      <p class="muted" style="margin:0">These appear in the Parties section of every agreement. Agreements can’t be sent until the legal name and address are filled in.</p>
+      <Field label="Legal business name" help="as registered, e.g. Detcord Digital LLC"><input class="input" value={f.legalName} onInput={(e) => setForm({ ...f, legalName: e.target.value })} /></Field>
+      <Field label="Business address"><input class="input" value={f.address} onInput={(e) => setForm({ ...f, address: e.target.value })} /></Field>
+      <Field label="Default signer for Detcord" help="name and title"><input class="input" value={f.signer} onInput={(e) => setForm({ ...f, signer: e.target.value })} /></Field>
+      <Field label="Notice email"><input class="input" type="email" value={f.email} onInput={(e) => setForm({ ...f, email: e.target.value })} /></Field>
+      {act.error && <div class="alert bad">{act.error}</div>}
+      <div><button class="btn" disabled={act.busy}>Save</button></div>
+    </form>
+  );
+}
+
+// Clover status. "Connected" only after a real test call succeeded.
+function PaymentSettings() {
+  const { loading, data, error, reload } = useLoad('/settings/integrations');
+  const act = useAction();
+  if (loading) return <Loading />;
+  if (error) return <ErrorBox error={error} retry={reload} />;
+  const c = data.clover;
+  const label = { not_configured: ['Not set up', 'bad'], untested: ['Set up, not tested', 'warn'], failing: ['Test failed', 'bad'], connected: ['Connected', 'good'] }[c.state];
+  const test = () => act.run(async () => {
+    try { await api('POST', '/settings/integrations/clover/test'); toast('Clover answered. Payments are connected.'); } finally { reload(); }
+  });
+  return (
+    <div class="stack" style="max-width:720px">
+      <section class="card">
+        <div class="row between"><h2 style="margin:0">Clover online payments</h2><span class={`badge ${label[1]}`}>{label[0]}</span></div>
+        <p class="muted">Clients pay invoices on Clover’s secure checkout page. An invoice is marked paid only when Clover’s signed confirmation reaches the portal, never from a button click.</p>
+        <dl class="kv">
+          <dt>Mode</dt><dd>{c.sandbox ? 'Sandbox (test cards, no real charges)' : 'Live'}</dd>
+          {c.missing.length > 0 && <><dt>Missing</dt><dd>{c.missing.join(', ')}<div class="small muted">Bob adds these as Worker secrets (setup Task 4).</div></dd></>}
+          <dt>Last test</dt><dd>{c.lastTest ? `${c.lastTest.ok ? 'Passed' : 'Failed'} ${dateTime(c.lastTest.at)} by ${c.lastTest.by}${c.lastTest.error ? `: ${c.lastTest.error}` : ''}` : 'Never'}</dd>
+          <dt>Last confirmation</dt><dd>{c.lastWebhook ? `${dateTime(c.lastWebhook.at)} (${c.lastWebhook.status || 'event'})` : 'None received yet'}</dd>
+          <dt>Webhook URL</dt><dd style="font-family:monospace;font-size:13px">{location.origin}/api/webhooks/clover</dd>
+        </dl>
+        {act.error && <div class="alert bad mt">{act.error}</div>}
+        <div class="row mt">
+          <button class="btn" onClick={test} disabled={!c.configured || act.busy}>Test connection</button>
+          <span class="small muted">Creates a $1 checkout page to prove the credentials work. Nothing is charged.</span>
+        </div>
+      </section>
+      <section class="card">
+        <div class="row between"><h2 style="margin:0">Email</h2><span class={`badge ${data.email.configured ? 'good' : 'bad'}`}>{data.email.configured ? 'Set up' : 'Not set up'}</span></div>
+        <p class="muted" style="margin-bottom:0">{data.email.configured ? 'Invites, receipts and agreement notices are emailed from info@detcorddigital.com.' : 'Without email, invite links are shown to you to share by hand, and receipts are not sent. Bob sets this up in Task 2.'}</p>
+      </section>
     </div>
   );
 }
