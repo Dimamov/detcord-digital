@@ -351,6 +351,9 @@ function GoatIntegrations() {
       <IntegrationCard title="Claude (GOAT plans)" item={claude} task="Task 6" path="claude"
         about="Drafts a plan for each GOAT request so the client can approve it. Without it, your team writes every plan by hand."
         okText={(t) => `Sample plan: “${t.sample}”`} testNote="Drafts one sample plan. Nothing is sent to anyone." />
+      <IntegrationCard title="Deepgram (meeting transcripts)" item={{ ...data.deepgram, missing: data.deepgram.configured ? [] : ['DEEPGRAM_API_KEY'] }} task="Task 6" path="deepgram"
+        about="Turns recorded sales meetings into transcripts with speakers, so Claude can draft CRM notes. Without it, recordings are kept but not transcribed."
+        okText={() => 'Deepgram accepted the key.'} testNote="Checks the key with Deepgram. No audio is sent." />
       <section class="card">
         <h2>GOAT requests by email and text</h2>
         <dl class="kv">

@@ -15,6 +15,7 @@ import { InvoicesPage, InvoicePage } from './pages/billing.jsx';
 import { FilesPage } from './pages/files.jsx';
 import { AuditPage, ReportPage } from './pages/audits.jsx';
 import { GoatPage, GoatRequestPage } from './pages/goat.jsx';
+import { MeetingPage } from './pages/meetings.jsx';
 
 const PUBLIC = [
   ['/login', Login],
@@ -45,6 +46,7 @@ const PRIVATE = [
   ['/reports/:id', ReportPage, ['admin', 'rep', 'client']],
   ['/goat', GoatPage, ['admin', 'rep', 'client']],
   ['/goat/:id', GoatRequestPage, ['admin', 'rep', 'client']],
+  ['/meetings/:id', MeetingPage, ['admin', 'rep']],
 ];
 
 const NAV = {

@@ -287,6 +287,7 @@ r.get('/settings/integrations/goat', async (c) => {
   requireRole(c, 'admin');
   const s = await getSettings(c.env.DB, 'integration.goat.');
   return c.json({
+    deepgram: { configured: !!c.env.DEEPGRAM_API_KEY, lastTest: s.deepgramTest || null, state: !c.env.DEEPGRAM_API_KEY ? 'not_configured' : s.deepgramTest?.ok ? 'connected' : s.deepgramTest ? 'failing' : 'untested' },
     claude: { configured: aiReady(c.env), lastTest: s.claudeTest || null, state: !aiReady(c.env) ? 'not_configured' : s.claudeTest?.ok ? 'connected' : s.claudeTest ? 'failing' : 'untested' },
     // Inbound channels count as connected only once a real message has arrived and been verified.
     email: { lastReceived: s.emailLast || null, state: s.emailLast ? 'connected' : 'untested', address: c.env.GOAT_INBOUND_ADDRESS || null },
@@ -307,6 +308,16 @@ r.post('/settings/integrations/claude/test', async (c) => {
   }
   result = { ...result, at: now(), by: user.name };
   await putSetting(c.env.DB, 'integration.goat.claudeTest', result, user.id);
+  return c.json(result, result.ok ? 200 : 502);
+});
+
+r.post('/settings/integrations/deepgram/test', async (c) => {
+  const user = requireRole(c, 'admin');
+  if (!c.env.DEEPGRAM_API_KEY) return c.json({ ok: false, error: 'Missing Worker secret: DEEPGRAM_API_KEY.' }, 400);
+  const res = await fetch('https://api.deepgram.com/v1/projects', { headers: { Authorization: `Token ${c.env.DEEPGRAM_API_KEY}` }, signal: AbortSignal.timeout(15000) }).catch(() => null);
+  let result = !res ? { ok: false, error: 'Could not reach Deepgram.' } : res.ok ? { ok: true } : { ok: false, error: res.status === 401 || res.status === 403 ? 'Deepgram rejected the API key.' : `Deepgram answered ${res.status}.` };
+  result = { ...result, at: now(), by: user.name };
+  await putSetting(c.env.DB, 'integration.goat.deepgramTest', result, user.id);
   return c.json(result, result.ok ? 200 : 502);
 });
 

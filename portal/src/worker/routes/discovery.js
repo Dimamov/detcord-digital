@@ -16,7 +16,7 @@ function cleanModules(v) {
 }
 
 // Keeps only known question ids and bounded values.
-function cleanAnswers(raw, industry, modules) {
+export function cleanAnswers(raw, industry, modules) {
   if (!raw || typeof raw !== 'object') return {};
   const ids = allQuestionIds(industry, modules);
   const out = {};

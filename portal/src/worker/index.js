@@ -14,6 +14,7 @@ import audits from './routes/audits.js';
 import emailDelivery from './routes/email-delivery.js';
 import goat from './routes/goat.js';
 import inbound, { handleEmail } from './routes/inbound.js';
+import meetings from './routes/meetings.js';
 
 const app = new Hono();
 
@@ -47,6 +48,7 @@ app.route('/api', billing);
 app.route('/api', media);
 app.route('/api', audits);
 app.route('/api', goat);
+app.route('/api', meetings);
 
 app.all('/api/*', (c) => c.json({ error: 'Not found.' }, 404));
 
@@ -65,7 +67,7 @@ export default {
     if (!out.headers.has('X-Frame-Options')) out.headers.set('X-Frame-Options', 'DENY');
     out.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
     out.headers.set('Strict-Transport-Security', 'max-age=31536000');
-    out.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    out.headers.set('Permissions-Policy', 'camera=(), microphone=(self), geolocation=()');
     return out;
   },
   // GOAT requests sent by email, routed here by Cloudflare Email Routing.

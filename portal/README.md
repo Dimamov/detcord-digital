@@ -59,6 +59,7 @@ secrets are set separately on the `detcord-portal` Worker; it never shares stagi
 | `TWILIO_ACCOUNT_SID`, `TWILIO_API_KEY_SID`, `TWILIO_API_KEY_SECRET`, `TWILIO_MESSAGING_SERVICE_SID` | texting website check reports and GOAT replies | Text says texting isn't set up; staff get the portal link to pass on |
 | `TWILIO_AUTH_TOKEN` | verifying incoming GOAT texts (Twilio signs webhooks with the auth token) | the text webhook answers 503 and no texts are accepted |
 | `ANTHROPIC_API_KEY` | Claude drafts a plan for each GOAT request | staff write every plan by hand |
+| `DEEPGRAM_API_KEY` | Transcribes recorded sales meetings (Claude then drafts the notes) | recordings are kept but not transcribed |
 
 Add them in Cloudflare under **Workers & Pages → (worker) → Settings → Variables and Secrets** (type Secret).
 `CLOVER_API_BASE` is a plain var: sandbox on staging, `https://api.clover.com` in production. Clover's webhook
@@ -101,6 +102,21 @@ message ID.
 
 Setup: texts need the Twilio number's incoming-message webhook set to `https://<portal>/api/webhooks/twilio`. Email needs
 a Cloudflare Email Routing rule that sends the GOAT address to this Worker (`Send to a Worker` → `detcord-portal`).
+
+## Recorded meetings
+
+Staff record an in-person sales meeting from a client record (**Meetings** tab) in the browser, or upload a recording.
+Recording can't start until the rep ticks that everyone agreed to be recorded; the rep and the time are saved with it.
+Michigan legal review: the consent wording on that checkbox and whether to also mention recording in agreements.
+
+1. The audio is streamed into R2 (`meetings/<client>/<id>`, up to 95 MB) and sent to Deepgram (nova-3, speaker labels).
+   Deepgram posts the transcript back to `/api/webhooks/deepgram/<id>` with a one-time token; nothing else is accepted.
+2. Claude drafts a summary, pain points, goals, budget, timeline, objections, next steps, recommended services,
+   discovery answers (with quotes) and a follow-up email draft. It is told not to invent anything that wasn't said.
+3. The rep ticks what to keep and presses **Save to CRM**: an internal note, tasks, and a discovery prefilled with the
+   chosen answers. Nothing is saved or sent before that, and the follow-up email is only a draft to copy.
+
+Meetings are staff only. The recording can be deleted on its own (the transcript stays) or with the whole meeting.
 
 ## Security rules the code enforces
 
