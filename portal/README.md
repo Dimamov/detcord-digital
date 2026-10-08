@@ -58,7 +58,7 @@ secrets are set separately on the `detcord-portal` Worker; it never shares stagi
 | `GOOGLE_API_KEY` | website checks: Google PageSpeed and the Google Business Profile lookup (Places API (New)) | the speed test runs only within Google's shared quota; the Google profile check is skipped and the report says so |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_API_KEY_SID`, `TWILIO_API_KEY_SECRET`, `TWILIO_MESSAGING_SERVICE_SID` | texting website check reports and GOAT replies | Text says texting isn't set up; staff get the portal link to pass on |
 | `TWILIO_AUTH_TOKEN` | verifying incoming GOAT texts (Twilio signs webhooks with the auth token) | the text webhook answers 503 and no texts are accepted |
-| `ANTHROPIC_API_KEY` | Claude drafts a plan for each GOAT request | staff write every plan by hand |
+| `ANTHROPIC_API_KEY` | Claude drafts a plan for each GOAT request and the monthly client reports | staff write every plan and report by hand |
 | `GOOGLE_ADS_CLIENT_ID`, `GOOGLE_ADS_CLIENT_SECRET`, `GOOGLE_ADS_REFRESH_TOKEN` (`GOOGLE_ADS_DEVELOPER_TOKEN` optional; Google now grants access to the Cloud project) | link requests from Detcord's manager account (MCC 448-262-6468, override with `GOOGLE_ADS_MANAGER_ID`) to client Google Ads accounts; the refresh token belongs to a Google user who can manage the MCC | customer IDs are saved as "Waiting for Google Ads setup"; Settings sends them all once the keys are in |
 | `DEEPGRAM_API_KEY` | Transcribes recorded sales meetings (Claude then drafts the notes) | recordings are kept but not transcribed |
 | `ZERNIO_API_KEY` | social posting through Zernio: connecting client accounts and publishing approved posts | Social says posting isn't set up; posts can be written and approved but not published |
@@ -143,6 +143,27 @@ Instagram, Google Business Profile, LinkedIn and X from their Social page; staff
 copy a connect link to send. Zernio sends the browser back to the portal, which then reads the accounts from Zernio.
 Clients only see posts sent to them, never drafts. **Settings → Integrations** has a Zernio card with **Test connection**;
 it shows as connected only after that test passes.
+
+## Monthly reports
+
+Staff pick a month on a client record (**Reports** tab) and press Generate. The portal gathers what it recorded for that
+client and month: GOAT requests received and finished (with their done notes and links), website checks and the score
+change since the previous check, services started, active and ended, invoices issued and payments received, agreements
+signed, meetings (titles and dates; summaries only if staff tick the box, transcripts never), tasks completed, updates
+posted and files shared. Claude (when `ANTHROPIC_API_KEY` is set) writes a headline, summary, sections, next month's
+focus and notes for the team, using only those facts. It is told that GA4, Search Console and Google Ads results aren't
+connected, so traffic, rankings and ad performance never appear. Without Claude, the facts are written out as bullets
+for staff to finish by hand. The facts snapshot, Claude's draft and the edited version are all kept.
+
+1. Staff edit every field. Generating again replaces the draft, and asks first if someone edited it.
+2. **Share** puts it in the client's portal under **Reports** (printable, "Save as PDF") and can email their portal
+   logins a link. If email isn't set up, nothing is claimed as sent and staff get the link to pass on.
+3. A shared report can't be edited or regenerated until staff **Unshare** it, which is logged. Clients only see shared
+   reports; drafts and other businesses' reports get the same 404 as a missing one. Team notes and facts stay internal.
+
+Admins can draft last month's report for every active client from **Settings → Monthly reports**. It runs a few
+clients per request (two with Claude, ten without) to stay inside Workers limits, shows progress, skips clients that
+already have a report for that month, and never shares anything.
 
 ## Security rules the code enforces
 

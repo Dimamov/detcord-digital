@@ -3,6 +3,7 @@ import { useLoad, api, toast, money, dollars, ago, date, dateTime, query } from 
 import { Loading, ErrorBox, Empty, Icon, Field, Dialog, Avatar, useAction } from '../ui.jsx';
 import { InviteResult } from './clients.jsx';
 import { SERVICE_CATEGORIES } from '../../shared/services.js';
+import { BulkReports } from './reports.jsx';
 
 const ROLE = { admin: 'Admin', rep: 'Sales rep', client: 'Client' };
 
@@ -93,13 +94,14 @@ export function Settings() {
     <div class="page">
       <div class="page-head"><div><div class="eyebrow">Agency</div><h1>Settings</h1></div></div>
       <div class="tabs">
-        {[['services', 'Services and prices'], ['pipeline', 'Pipeline stages'], ['commissions', 'Commission rules'], ['company', 'Company'], ['payments', 'Integrations']].map(([k, l]) => <button aria-selected={tab === k} onClick={() => setTab(k)}>{l}</button>)}
+        {[['services', 'Services and prices'], ['pipeline', 'Pipeline stages'], ['commissions', 'Commission rules'], ['company', 'Company'], ['reports', 'Monthly reports'], ['payments', 'Integrations']].map(([k, l]) => <button aria-selected={tab === k} onClick={() => setTab(k)}>{l}</button>)}
       </div>
       {tab === 'company' && <CompanySettings />}
       {tab === 'payments' && <PaymentSettings />}
       {tab === 'services' && <ServicesSettings />}
       {tab === 'pipeline' && <StageSettings />}
       {tab === 'commissions' && <CommissionSettings />}
+      {tab === 'reports' && <BulkReports />}
     </div>
   );
 }
