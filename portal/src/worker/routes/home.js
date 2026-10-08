@@ -79,7 +79,8 @@ r.get('/dashboard', async (c) => {
     FROM users u WHERE u.role='rep' AND u.status<>'disabled' ORDER BY u.name`).bind(sod).all()).results;
   const activity = (await db.prepare(`SELECT a.*, u.name AS actor, cl.name AS client_name FROM activity a LEFT JOIN users u ON u.id=a.actor_id LEFT JOIN clients cl ON cl.id=a.client_id
     ORDER BY a.created_at DESC LIMIT 15`).all()).results;
-  return c.json({ ...base, counts, invites, team, activity });
+  const emails = (await db.prepare('SELECT id,provider_id,recipient,subject,status,error,created_at,updated_at FROM outbound_emails WHERE is_alert=0 ORDER BY created_at DESC LIMIT 20').all()).results;
+  return c.json({ ...base, counts, invites, team, activity, emails, emailTrackingReady: !!c.env.RESEND_WEBHOOK_SECRET });
 });
 
 // ---------- Service catalog ----------

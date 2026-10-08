@@ -11,6 +11,7 @@ import contracts from './routes/contracts.js';
 import billing from './routes/billing.js';
 import media from './routes/media.js';
 import audits from './routes/audits.js';
+import emailDelivery from './routes/email-delivery.js';
 
 const app = new Hono();
 
@@ -31,6 +32,7 @@ app.use('/api/*', async (c, next) => {
 });
 app.use('/api/*', loadUser);
 
+app.route('/api', emailDelivery);
 app.route('/api/auth', auth);
 app.route('/api/users', users);
 app.route('/api/clients', clients);

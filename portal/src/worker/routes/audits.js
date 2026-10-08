@@ -83,7 +83,7 @@ r.get('/audits/:id', async (c) => {
   const { client, audit } = await loadAudit(c, c.req.param('id'));
   const db = c.env.DB;
   const [deliveries, contacts, logins] = await Promise.all([
-    db.prepare('SELECT d.*, u.name AS by_name FROM audit_deliveries d LEFT JOIN users u ON u.id=d.sent_by WHERE d.audit_id=? ORDER BY d.created_at DESC').bind(audit.id).all(),
+    db.prepare('SELECT d.*, COALESCE(e.status,d.status) AS status, COALESCE(e.error,d.error) AS error, u.name AS by_name FROM audit_deliveries d LEFT JOIN users u ON u.id=d.sent_by LEFT JOIN outbound_emails e ON e.provider_id=d.provider_id AND d.channel=\'email\' WHERE d.audit_id=? ORDER BY d.created_at DESC').bind(audit.id).all(),
     db.prepare('SELECT name, email, phone FROM contacts WHERE client_id=? ORDER BY is_primary DESC, name').bind(client.id).all(),
     db.prepare('SELECT u.name, u.email, u.phone, u.status FROM client_members m JOIN users u ON u.id=m.user_id WHERE m.client_id=? ORDER BY u.name').bind(client.id).all(),
   ]);
@@ -178,6 +178,7 @@ r.post('/audits/:id/send', async (c) => {
     const top = visible.filter((f) => f.severity !== 'minor').slice(0, 3);
     const mail = renderEmail({
       origin: originOf(c),
+      omitLogo: user.role === 'admin' && body.omitLogo === true,
       heading: `Your website check: ${result.overall}/100`,
       paragraphs: [
         `Hi ${first}, we ran a full check of ${client.name}'s website and Google presence: search visibility, local search, mobile experience, speed and security.`,
@@ -188,7 +189,7 @@ r.post('/audits/:id/send', async (c) => {
       button: { label: invite ? 'Open my report' : 'View my report', url: link.url },
       footnote: invite ? `This setup link works once and expires in 7 days. After that, sign in at ${originOf(c)}. Questions? Just reply to this email.` : 'Questions? Just reply to this email.',
     });
-    sent = await sendEmail(c.env, { to: email, subject: `${client.name}: your website and Google check (${result.overall}/100)`, ...mail, idempotencyKey: `audit/${audit.id}/${email}/${Math.floor(now() / 60000)}` });
+    sent = await sendEmail(c.env, { to: email, subject: `${client.name}: your website and Google check (${result.overall}/100)`, ...mail, idempotencyKey: `audit/${audit.id}/${email}/${Math.floor(now() / 60000)}/${body.omitLogo === true ? "no-logo" : "logo"}` });
   } else {
     const msg = `Hi ${first}, your website and Google check for ${client.name} is ready in your Detcord portal (score ${result.overall}/100): ${link.url} Reply STOP to opt out.`;
     sent = await sendSms(c.env, { to, body: msg });

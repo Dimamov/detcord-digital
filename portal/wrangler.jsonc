@@ -37,6 +37,7 @@
       ],
       "vars": {
         "APP_NAME": "Detcord Digital (staging)",
+        "EMAIL_ALERT_TO": "dmitriymovsesyan@gmail.com",
         "PUBLIC_URL": "",
         "EMAIL_FROM": "Detcord Digital <info@detcorddigital.com>",
         "REPLY_TO": "info@detcorddigital.com",

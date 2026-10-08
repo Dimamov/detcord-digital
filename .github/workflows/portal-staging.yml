@@ -68,9 +68,9 @@ jobs:
           cache-dependency-path: portal/package-lock.json
       - if: steps.gate.outputs.ready == 'true'
         run: npm ci --legacy-peer-deps
-      - name: Deploy staging Worker
-        if: steps.gate.outputs.ready == 'true'
-        run: npm run deploy:staging
       - name: Apply database migrations
         if: steps.gate.outputs.ready == 'true'
         run: npx wrangler d1 migrations apply detcord-portal-staging --remote --env staging
+      - name: Deploy staging Worker
+        if: steps.gate.outputs.ready == 'true'
+        run: npm run deploy:staging

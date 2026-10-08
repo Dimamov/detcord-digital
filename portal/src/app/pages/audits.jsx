@@ -163,7 +163,7 @@ export function AuditPage({ id, user }) {
                 <div class="stack" style="gap:8px">
                   {a.deliveries.map((d) => (
                     <div class="small">
-                      <div class="row between"><span><Icon name={d.channel === 'sms' ? 'phone' : 'mail'} size={14} /> {d.recipient}</span><span class={`badge ${d.status === 'sent' ? 'good' : 'bad'}`}>{d.status === 'sent' ? 'Sent' : d.status === 'not_configured' ? 'Not sent' : 'Failed'}</span></div>
+                      <div class="row between"><span><Icon name={d.channel === 'sms' ? 'phone' : 'mail'} size={14} /> {d.recipient}</span><span class={`badge ${d.status === 'delivered' || (d.channel === 'sms' && d.status === 'sent') ? 'good' : ['sent', 'accepted', 'delayed'].includes(d.status) ? 'warn' : 'bad'}`}>{d.status === 'sent' ? (d.channel === 'sms' ? 'Sent' : 'Accepted — awaiting delivery') : d.status.replaceAll('_', ' ')}</span></div>
                       <div class="faint">{ago(d.created_at)}{d.by_name ? ` · ${d.by_name}` : ''} · {d.link_kind === 'invite' ? 'password setup link' : 'sign-in link'}{d.error ? ` · ${d.error}` : ''}{d.provider_id ? ` · ID ${d.provider_id}` : ''}</div>
                     </div>
                   ))}
@@ -174,23 +174,24 @@ export function AuditPage({ id, user }) {
           </aside>
         </div>
       )}
-      {sending && <SendDialog audit={a} channel={sending} onClose={() => setSending(null)} onDone={(m) => { setSending(null); setManual(m); reload(); }} />}
+      {sending && <SendDialog user={user} audit={a} channel={sending} onClose={() => setSending(null)} onDone={(m) => { setSending(null); setManual(m); reload(); }} />}
     </div>
   );
 }
 
 // Email or text one person. They get a link into their portal: a password setup link the first time, a sign-in link after.
-function SendDialog({ audit, channel, onClose, onDone }) {
+function SendDialog({ user, audit, channel, onClose, onDone }) {
   const people = audit.people;
   const [pick, setPick] = useState(0);
   const [p, setP] = useState(people[0]);
   const [consent, setConsent] = useState(false);
+  const [omitLogo, setOmitLogo] = useState(false);
   const { busy, error, run } = useAction();
   const sms = channel === 'sms';
   const choose = (i) => { setPick(i); setP(people[i]); };
   const send = () => run(async () => {
     try {
-      const r = await api('POST', `/audits/${audit.id}/send`, { channel, name: p.name, email: p.email, phone: p.phone, consent });
+      const r = await api('POST', `/audits/${audit.id}/send`, { channel, name: p.name, email: p.email, phone: p.phone, consent, omitLogo });
       toast(sms ? `Texted ${p.name.split(' ')[0]} a link to the report.` : `Emailed ${p.name.split(' ')[0]} a link to the report.`);
       onDone(null);
       return r;
@@ -205,6 +206,7 @@ function SendDialog({ audit, channel, onClose, onDone }) {
       <div class="stack">
         {!audit.channels[channel] && <div class="alert warn small">{sms ? 'Texting (Twilio) isn\'t connected yet.' : 'Email sending isn\'t connected yet.'} The report still goes into their portal, and you'll get the link to send yourself.</div>}
         {people.length > 1 && <div class="chips">{people.map((x, i) => <button type="button" class="chip" aria-pressed={pick === i} onClick={() => choose(i)}>{x.name || x.email}</button>)}</div>}
+        {!sms && user.role === 'admin' && <label class="row"><input type="checkbox" checked={omitLogo} onChange={(e) => setOmitLogo(e.target.checked)} />Send without header image (delivery test)</label>}
         <Field label="Name"><input class="input" value={p.name} onInput={(e) => setP({ ...p, name: e.target.value })} /></Field>
         <Field label="Email" help={sms ? 'for their portal login' : undefined}><input class="input" type="email" value={p.email} onInput={(e) => setP({ ...p, email: e.target.value, login: null })} /></Field>
         {sms && <Field label="Mobile number"><input class="input" type="tel" value={p.phone} onInput={(e) => setP({ ...p, phone: e.target.value })} /></Field>}

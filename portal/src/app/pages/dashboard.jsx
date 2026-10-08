@@ -69,6 +69,14 @@ function StaffDay({ user }) {
         </>}
       </div>
 
+      {admin && <section class="card mb">
+        <h2>Email delivery</h2>
+        {!data.emailTrackingReady && <div class="alert warn">Delivery tracking needs its Resend webhook connected. Accepted means the provider accepted the message; delivery is not yet confirmed.</div>}
+        {data.emails?.length ? <div class="list">{data.emails.map((e) => <div class="list-item" key={e.id}>
+          <div style="flex:1;min-width:0"><div class="title">{e.recipient}</div><div class="meta">{e.subject} · {ago(e.created_at)}</div>{e.error && <div class="small">{e.error}</div>}</div>
+          <span class={`badge ${e.status === 'delivered' ? 'good' : ['bounced','failed','suppressed','not_configured'].includes(e.status) ? 'bad' : 'warn'}`}>{e.status === 'accepted' ? 'Accepted — awaiting delivery' : e.status.replaceAll('_', ' ')}</span>
+        </div>)}</div> : <p class="muted">New emails will appear here. Failed deliveries also appear in Recent activity.</p>}
+      </section>}
       <div class="grid main-side">
         <div class="stack">
           <section class="card">

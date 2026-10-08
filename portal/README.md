@@ -91,3 +91,28 @@ link to pass on. The check stays within the free plan's 50 subrequests per reque
   database trigger blocks any change to a signed agreement.
 - Invoices are marked paid only by Clover's signed webhook (HMAC-SHA256, `Clover-Signature`) or by an admin
   recording a manual payment. Repeated webhooks are recorded once.
+
+
+## Email delivery alerts (staging)
+
+New sends appear in the admin dashboard as Accepted until Resend confirms delivery.
+The dashboard records delivered, delayed, bounced, failed and suppressed outcomes,
+including the rejection reason. Failure alerts go to EMAIL_ALERT_TO (staging:
+dmitriymovsesyan@gmail.com). Alert emails are plain text and do not alert on their
+own failures. Bodies and account setup links are never stored in delivery logs.
+
+To activate delivery events, create a webhook in the business Resend account:
+- Endpoint: https://detcord-portal-staging.dmitriymovsesyan.workers.dev/api/webhooks/resend
+- Events: email.sent, email.delivered, email.delivery_delayed, email.bounced,
+  email.failed, email.suppressed
+- Copy its signing secret directly to the staging Worker secret RESEND_WEBHOOK_SECRET.
+  Never put it in Git, chat or email.
+
+Webhook signatures are verified before use, with a five-minute timestamp window.
+Duplicate events and late accepted events do not duplicate alerts or overwrite
+terminal delivery states. Resend retries the webhook if the admin alert cannot be
+accepted. Delivery means accepted by the recipient server, not necessarily inbox
+placement. Historical sends before tracking was installed are not backfilled.
+
+Admins can select “Send without header image (delivery test)” in a report email
+send dialog. This removes the image only; normal emails retain the logo.
