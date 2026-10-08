@@ -64,3 +64,10 @@ describe('Google Ads link requests', () => {
     expect(ads.error).toContain('Basic access');
   });
 });
+
+describe('Google Ads without a developer token', () => {
+  it('counts as set up', async () => {
+    const { adsReady } = await import('../src/worker/lib/google-ads.js');
+    expect(adsReady({ GOOGLE_ADS_CLIENT_ID: 'a', GOOGLE_ADS_CLIENT_SECRET: 'b', GOOGLE_ADS_REFRESH_TOKEN: 'c' })).toBe(true);
+  });
+});

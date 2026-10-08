@@ -4,7 +4,9 @@
 import { now } from './util.js';
 
 const API = 'https://googleads.googleapis.com';
-export const ADS_SECRETS = ['GOOGLE_ADS_DEVELOPER_TOKEN', 'GOOGLE_ADS_CLIENT_ID', 'GOOGLE_ADS_CLIENT_SECRET', 'GOOGLE_ADS_REFRESH_TOKEN'];
+// Since September 2026 Google grants API access to the Cloud project behind the OAuth client, not to a developer
+// token. The token is still sent when one is set (older setups), but it is no longer required.
+export const ADS_SECRETS = ['GOOGLE_ADS_CLIENT_ID', 'GOOGLE_ADS_CLIENT_SECRET', 'GOOGLE_ADS_REFRESH_TOKEN'];
 export const adsMissing = (env) => ADS_SECRETS.filter((k) => !env[k]);
 export const adsReady = (env) => !adsMissing(env).length;
 const managerId = (env) => String(env.GOOGLE_ADS_MANAGER_ID || '4482626468').replace(/\D/g, '');
@@ -39,7 +41,7 @@ async function call(env, path, body) {
   const token = await accessToken(env);
   const res = await fetch(`${API}/${version(env)}/customers/${managerId(env)}/${path}`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'developer-token': env.GOOGLE_ADS_DEVELOPER_TOKEN, 'login-customer-id': managerId(env), 'Content-Type': 'application/json' },
+    headers: { Authorization: `Bearer ${token}`, ...(env.GOOGLE_ADS_DEVELOPER_TOKEN ? { 'developer-token': env.GOOGLE_ADS_DEVELOPER_TOKEN } : {}), 'login-customer-id': managerId(env), 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(20000),
   }).catch(() => null);
@@ -55,7 +57,8 @@ async function call(env, path, body) {
 
 function friendly(code, fallback) {
   const map = {
-    DEVELOPER_TOKEN_NOT_APPROVED: 'The developer token is only approved for test accounts. Apply for Basic access in the Google Ads API Center.',
+    DEVELOPER_TOKEN_NOT_APPROVED: 'This Google Cloud project only has test access. Request Basic access on the Google Ads API Overview page in the Google Cloud Console.',
+    CLOUD_PROJECT_NOT_APPROVED_FOR_PRODUCTION: 'This Google Cloud project only has test access. Request Basic access on the Google Ads API Overview page in the Google Cloud Console.',
     CUSTOMER_NOT_FOUND: 'Google Ads has no account with that customer ID.',
     ALREADY_INVITED_BY_THIS_MANAGER: 'A request from Detcord is already waiting in this account.',
     ALREADY_MANAGED_BY_THIS_MANAGER: 'This account is already linked to Detcord.',
