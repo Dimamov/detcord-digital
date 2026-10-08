@@ -1,0 +1,39 @@
+{
+  // Detcord portal v2. Separate Worker from the marketing site.
+  // Production will be served at portal.detcorddigital.com; staging uses workers.dev.
+  "name": "detcord-portal",
+  "main": "src/worker/index.js",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "detcord-portal", "migrations_dir": "migrations" }
+  ],
+  "vars": {
+    "APP_NAME": "Detcord Digital",
+    "PUBLIC_URL": "https://portal.detcorddigital.com",
+    "EMAIL_FROM": "Detcord Digital <info@detcorddigital.com>",
+    "REPLY_TO": "info@detcorddigital.com"
+  },
+  "workers_dev": false,
+  "env": {
+    "staging": {
+      "name": "detcord-portal-staging",
+      "workers_dev": true,
+      "d1_databases": [
+        { "binding": "DB", "database_name": "detcord-portal-staging", "migrations_dir": "migrations" }
+      ],
+      "vars": {
+        "APP_NAME": "Detcord Digital (staging)",
+        "PUBLIC_URL": "",
+        "EMAIL_FROM": "Detcord Digital <info@detcorddigital.com>",
+        "REPLY_TO": "info@detcorddigital.com"
+      }
+    }
+  }
+}

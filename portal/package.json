@@ -1,0 +1,22 @@
+{
+  "name": "detcord-portal",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite build && wrangler dev",
+    "build": "vite build",
+    "test": "vitest run",
+    "deploy:staging": "vite build && wrangler deploy --env staging"
+  },
+  "dependencies": {
+    "hono": "^4.13.13"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.3.7",
+    "@preact/preset-vite": "^2.10.6",
+    "preact": "^11.0.0",
+    "vite": "^7.3.7",
+    "vitest": "^4.1.11",
+    "wrangler": "^4.148.0"
+  }
+}
