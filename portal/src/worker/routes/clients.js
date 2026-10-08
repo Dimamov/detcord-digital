@@ -3,6 +3,8 @@ import { Hono } from 'hono';
 import { fail, now, newId, text, cents, oneOf, readJson, logActivity, EMAIL_RE } from '../lib/util.js';
 import { requireUser, requireRole, requireClient, clientScopeSql, isStaff } from '../lib/auth.js';
 import { INDUSTRY_IDS } from '../../shared/discovery/industries.js';
+import { cleanCustomerId } from '../lib/google-ads.js';
+import { setAdsAccount } from './google-ads.js';
 
 const r = new Hono();
 const STATUSES = ['lead', 'prospect', 'active', 'paused', 'former'];
@@ -99,8 +101,11 @@ r.post('/', async (c) => {
     stmts.push(db.prepare("INSERT INTO deals (id, client_id, owner_id, stage_id, title, created_at, updated_at) VALUES (?,?,?,'new',?,?,?)")
       .bind(newId(), id, repId || user.id, `${f.name} — new business`, t, t));
   }
+  const adsId = body.googleAdsId ? cleanCustomerId(body.googleAdsId) : null;
+  if (body.googleAdsId && !adsId) fail(400, 'Enter the 10-digit Google Ads customer ID, like 123-456-7890.');
   await db.batch(stmts);
   await logActivity(db, { clientId: id, actorId: user.id, kind: 'client_created', summary: `Created ${f.name}` });
+  if (adsId) await setAdsAccount(c, { id, ads_customer_id: null }, adsId, user);
   return c.json({ id }, 201);
 });
 

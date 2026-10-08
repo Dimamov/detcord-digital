@@ -8,7 +8,8 @@ export default defineConfig({
     cloudflareTest({
       wrangler: { configPath: './wrangler.jsonc' },
       miniflare: { bindings: { TEST_MIGRATIONS: migrations, RESEND_API_KEY: '', CLOVER_MERCHANT_ID: 'TESTMERCHANT', CLOVER_PRIVATE_TOKEN: 'test-private-token', CLOVER_WEBHOOK_SECRET: 'test-webhook-secret', CLOVER_API_BASE: 'https://apisandbox.dev.clover.com',
-        GOOGLE_API_KEY: 'test-google-key', TWILIO_ACCOUNT_SID: 'ACtest', TWILIO_API_KEY_SID: 'SKtest', TWILIO_API_KEY_SECRET: 'test-secret', TWILIO_MESSAGING_SERVICE_SID: 'MGtest', TWILIO_AUTH_TOKEN: 'test-auth-token', DEEPGRAM_API_KEY: 'test-deepgram-key' } },
+        GOOGLE_API_KEY: 'test-google-key', TWILIO_ACCOUNT_SID: 'ACtest', TWILIO_API_KEY_SID: 'SKtest', TWILIO_API_KEY_SECRET: 'test-secret', TWILIO_MESSAGING_SERVICE_SID: 'MGtest', TWILIO_AUTH_TOKEN: 'test-auth-token', DEEPGRAM_API_KEY: 'test-deepgram-key',
+        GOOGLE_ADS_DEVELOPER_TOKEN: 'test-dev-token', GOOGLE_ADS_CLIENT_ID: 'test-client', GOOGLE_ADS_CLIENT_SECRET: 'test-secret', GOOGLE_ADS_REFRESH_TOKEN: 'test-refresh' } },
     }),
   ],
   test: { setupFiles: ['./test/apply-migrations.js'], include: ['test/**/*.test.js'] },

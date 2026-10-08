@@ -16,6 +16,7 @@ import goat from './routes/goat.js';
 import inbound, { handleEmail } from './routes/inbound.js';
 import meetings from './routes/meetings.js';
 import layouts from './routes/layouts.js';
+import googleAds from './routes/google-ads.js';
 
 const app = new Hono();
 
@@ -51,6 +52,7 @@ app.route('/api', audits);
 app.route('/api', goat);
 app.route('/api', meetings);
 app.route('/api', layouts);
+app.route('/api', googleAds);
 
 app.all('/api/*', (c) => c.json({ error: 'Not found.' }, 404));
 

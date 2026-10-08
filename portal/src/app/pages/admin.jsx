@@ -336,11 +336,38 @@ function PaymentSettings() {
         about="Website checks use Google PageSpeed and Google Places. Without a key, the speed test runs only when Google's shared limit allows, and the Google profile check is skipped."
         okText={() => 'PageSpeed and Places both answered.'} testNote="Runs one speed test and one Places search." />
       <GoatIntegrations />
+      <GoogleAdsIntegration />
       <section class="card">
         <div class="row between"><h2 style="margin:0">Email</h2><span class={`badge ${data.email.configured ? 'good' : 'bad'}`}>{data.email.configured ? 'Set up' : 'Not set up'}</span></div>
         <p class="muted" style="margin-bottom:0">{data.email.configured ? 'Invites, receipts and agreement notices are emailed from info@detcorddigital.com.' : 'Without email, invite links are shown to you to share by hand, and receipts are not sent. Bob sets this up in Task 2.'}</p>
       </section>
     </div>
+  );
+}
+
+// Google Ads API access for manager-account link requests.
+function GoogleAdsIntegration() {
+  const { data, reload } = useLoad('/settings/integrations/google-ads');
+  const act = useAction();
+  if (!data) return null;
+  const send = () => act.run(async () => {
+    const r = await api('POST', '/settings/integrations/google-ads/send-waiting');
+    toast(`Sent ${r.sent} request${r.sent === 1 ? '' : 's'}${r.failed ? `, ${r.failed} failed` : ''}.`);
+    reload();
+  });
+  return (
+    <>
+      <IntegrationCard title="Google Ads (manager account links)" item={data} task="Google Ads setup" path="google-ads"
+        about={`Sends link requests from Detcord's manager account (${data.manager}) to each client's Google Ads account. Without it, customer IDs are saved and the requests wait.`}
+        okText={(t) => `Manager account ${t.name || ''} ${t.id || ''}`} testNote="Reads the manager account. Nothing is sent." />
+      {data.waiting > 0 && (
+        <section class="card row between">
+          <span>{data.waiting} client{data.waiting === 1 ? ' is' : 's are'} waiting for a Google Ads link request.</span>
+          <button class="btn sm" disabled={!data.configured || act.busy} onClick={send}>Send them now</button>
+          {act.error && <div class="alert bad" style="width:100%">{act.error}</div>}
+        </section>
+      )}
+    </>
   );
 }
 

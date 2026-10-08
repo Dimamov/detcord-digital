@@ -10,6 +10,7 @@ import { FilesPanel } from './files.jsx';
 import { AuditsTab } from './audits.jsx';
 import { GoatTab } from './goat.jsx';
 import { MeetingsTab } from './meetings.jsx';
+import { GoogleAdsCard } from './google-ads.jsx';
 
 export function IndustrySelect({ value, onChange, required }) {
   return (
@@ -79,7 +80,7 @@ export function ClientsList({ user }) {
 
 // ---------- New or existing ----------
 export function NewClient({ user }) {
-  const [f, setF] = useState({ name: '', industry: '', phone: '', website: '', city: '', email: '', contactName: '', contactTitle: '', contactEmail: '', contactPhone: '', decisionMaker: true, repId: '', source: '', runCheck: true });
+  const [f, setF] = useState({ name: '', industry: '', phone: '', website: '', city: '', email: '', contactName: '', contactTitle: '', contactEmail: '', contactPhone: '', decisionMaker: true, repId: '', source: '', googleAdsId: '', runCheck: true });
   const [matches, setMatches] = useState({ matches: [], hidden: 0 });
   const team = useLoad(user.role === 'admin' ? '/team' : null);
   const { busy, error, run } = useAction();
@@ -100,6 +101,7 @@ export function NewClient({ user }) {
       const { id } = await api('POST', '/clients', {
         name: f.name, industry: f.industry || null, phone: f.phone, website: f.website, city: f.city, email: f.email, source: f.source,
         repId: f.repId || undefined,
+        googleAdsId: f.googleAdsId || undefined,
         contact: f.contactName ? { name: f.contactName, title: f.contactTitle, email: f.contactEmail, phone: f.contactPhone, decisionMaker: f.decisionMaker } : undefined,
       });
       toast(`${f.name} added.`);
@@ -126,6 +128,7 @@ export function NewClient({ user }) {
           <Field label="Website"><input class="input" placeholder="example.com" value={f.website} onInput={set('website')} /></Field>
           <Field label="Business email"><input class="input" type="email" placeholder="owner@example.com" value={f.email} onInput={set('email')} /></Field>
           <Field label="City" help="used for the local search check"><input class="input" value={f.city} onInput={set('city')} /></Field>
+          <Field label="Google Ads customer ID" help="optional; Detcord's manager account sends them a link request"><input class="input" inputMode="numeric" placeholder="123-456-7890" value={f.googleAdsId} onInput={set('googleAdsId')} /></Field>
           <Field label="Lead source" help="optional"><input class="input" placeholder="Referral, website, cold call…" value={f.source} onInput={set('source')} /></Field>
           {user.role === 'admin' && (
             <Field label="Assigned rep" help="optional">
@@ -261,6 +264,7 @@ function Overview({ data, user, reload }) {
             <dt>Added</dt><dd>{date(c.created_at)}</dd>
           </dl>
         </section>
+        <GoogleAdsCard clientId={c.id} />
         <ContactsCard data={data} reload={reload} />
         <TeamCard data={data} user={user} reload={reload} />
       </div>
