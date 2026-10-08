@@ -2,6 +2,7 @@ import { useLoad, date, money } from '../lib.js';
 import { Loading, ErrorBox, Empty, Avatar, Icon } from '../ui.jsx';
 import { session } from '../lib.js';
 import { ReportsCard } from './audits.jsx';
+import { MonthlyReportsCard } from './reports.jsx';
 import { GoatCard } from './goat.jsx';
 import { Board } from '../board.jsx';
 
@@ -33,6 +34,7 @@ function BusinessView({ id, user, others }) {
       <ActionItems />
       <Board page="client-home" cards={[
         { id: 'reports', title: 'Reports', col: 'top', node: <ReportsCard /> },
+        { id: 'monthly', title: 'Monthly reports', col: 'top', node: <MonthlyReportsCard /> },
         { id: 'goat', title: 'Ask the GOAT', col: 'top', node: <GoatCard clientId={client.id} user={user} /> },
         { id: 'updates', title: 'Updates from Detcord', col: 'main', node: (
           <section class="card">
