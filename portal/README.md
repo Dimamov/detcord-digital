@@ -38,11 +38,15 @@ the endpoint refuses to run again. After that, every other user is invited from 
 | Environment | Worker | Database | URL |
 | --- | --- | --- | --- |
 | staging | `detcord-portal-staging` | `detcord-portal-staging` | workers.dev |
-| production (later) | `detcord-portal` | `detcord-portal` | portal.detcorddigital.com, after DNS is approved |
+| production | `detcord-portal` | `detcord-portal` | portal.detcorddigital.com |
 
 The GitHub Action `.github/workflows/portal-staging.yml` tests every change. On pushes to `portal-v2`, it also
 deploys staging and applies migrations. It skips the deploy until the `CLOUDFLARE_API_TOKEN` and
 `CLOUDFLARE_ACCOUNT_ID` repository secrets exist. Wrangler creates the D1 database on the first deploy.
+
+`.github/workflows/portal-production.yml` deploys production when portal changes land on `main` (or when run by
+hand). It tests, applies migrations to `detcord-portal`, then deploys the Worker and its custom domain. Production
+secrets are set separately on the `detcord-portal` Worker; it never shares staging's database, files or keys.
 
 ## Secrets (Worker secrets, never in the repo)
 

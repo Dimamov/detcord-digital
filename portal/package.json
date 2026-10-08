@@ -6,6 +6,7 @@
     "dev": "vite build && wrangler dev",
     "build": "vite build",
     "test": "vitest run",
+    "deploy": "vite build && wrangler deploy",
     "deploy:staging": "vite build && wrangler deploy --env staging"
   },
   "dependencies": {

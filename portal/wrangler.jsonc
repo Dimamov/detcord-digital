@@ -1,6 +1,6 @@
 {
   // Detcord portal v2. Separate Worker from the marketing site.
-  // Production will be served at portal.detcorddigital.com; staging uses workers.dev.
+  // Production is served at portal.detcorddigital.com; staging uses workers.dev.
   "name": "detcord-portal",
   "main": "src/worker/index.js",
   "compatibility_date": "2026-10-01",
@@ -12,23 +12,26 @@
     "run_worker_first": ["/api/*"]
   },
   "d1_databases": [
-    { "binding": "DB", "database_name": "detcord-portal", "migrations_dir": "migrations" }
+    { "binding": "DB", "database_name": "detcord-portal", "database_id": "4d38a66c-7736-405a-b86d-4e35785bc0d3", "migrations_dir": "migrations" }
   ],
   "r2_buckets": [
     { "binding": "MEDIA", "bucket_name": "detcord-portal-media" }
   ],
   "vars": {
     "APP_NAME": "Detcord Digital",
+    "EMAIL_ALERT_TO": "dmitriymovsesyan@gmail.com",
     "PUBLIC_URL": "https://portal.detcorddigital.com",
     "EMAIL_FROM": "Detcord Digital <info@detcorddigital.com>",
     "REPLY_TO": "info@detcorddigital.com",
     "CLOVER_API_BASE": "https://api.clover.com"
   },
   "workers_dev": false,
+  "routes": [{ "pattern": "portal.detcorddigital.com", "custom_domain": true }],
   "env": {
     "staging": {
       "name": "detcord-portal-staging",
       "workers_dev": true,
+      "routes": [],
       "d1_databases": [
         { "binding": "DB", "database_name": "detcord-portal-staging", "migrations_dir": "migrations" }
       ],
