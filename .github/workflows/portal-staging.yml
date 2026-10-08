@@ -6,7 +6,7 @@ name: Portal staging
 
 on:
   push:
-    branches: [portal-v2]
+    branches-ignore: [main]
     paths:
       - 'portal/**'
       - '.github/workflows/portal-staging.yml'

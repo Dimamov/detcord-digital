@@ -7,7 +7,7 @@ const size = (n) => (n > 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.ma
 const isImage = (t) => /^image\/(png|jpeg|webp|gif)$/.test(t);
 
 // Streams one file with progress. Resolves with the saved file or rejects with a readable error.
-function uploadFile(clientId, file, { visibility, purpose }, onProgress) {
+export function uploadFile(clientId, file, { visibility, purpose }, onProgress) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     const q = new URLSearchParams({ filename: file.name, purpose, ...(visibility ? { visibility } : {}) });
@@ -157,11 +157,11 @@ export function FilesPanel({ clientId, user, onPick, pickedIds = [], onlyShared 
   );
 }
 
-export function FilePicker({ clientId, user, picked, onChange, onClose }) {
+export function FilePicker({ clientId, user, picked, onChange, onClose, note = 'Only files shared with the client can go on an agreement.' }) {
   const ids = picked.map((p) => p.id);
   return (
     <Dialog title="Attach files" onClose={onClose} footer={<button class="btn" onClick={onClose}>Done</button>}>
-      <p class="small muted" style="margin-top:0">Only files shared with the client can go on an agreement.</p>
+      <p class="small muted" style="margin-top:0">{note}</p>
       <FilesPanel clientId={clientId} user={user} onlyShared pickedIds={ids}
         onPick={(f) => onChange(ids.includes(f.id) ? picked.filter((p) => p.id !== f.id) : [...picked, { id: f.id, filename: f.filename, contentType: f.content_type }])} />
     </Dialog>

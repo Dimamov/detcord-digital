@@ -3,6 +3,8 @@ import { Hono } from 'hono';
 import { fail, now, newId, text, cents, oneOf, readJson, logActivity, EMAIL_RE } from '../lib/util.js';
 import { requireUser, requireRole, requireClient, clientScopeSql, isStaff } from '../lib/auth.js';
 import { INDUSTRY_IDS } from '../../shared/discovery/industries.js';
+import { cleanCustomerId } from '../lib/google-ads.js';
+import { setAdsAccount } from './google-ads.js';
 
 const r = new Hono();
 const STATUSES = ['lead', 'prospect', 'active', 'paused', 'former'];
@@ -50,11 +52,12 @@ r.get('/', async (c) => {
   if (status && STATUSES.includes(status)) { where.push('cl.status=?'); binds.push(status); }
   const rows = (await c.env.DB.prepare(`SELECT cl.id, cl.name, cl.industry, cl.city, cl.status, cl.phone, cl.website, cl.updated_at,
       (SELECT group_concat(u.name, ', ') FROM assignments a JOIN users u ON u.id=a.user_id WHERE a.client_id=cl.id) AS reps,
+      EXISTS (SELECT 1 FROM assignments a WHERE a.client_id=cl.id AND a.user_id=?) AS mine,
       (SELECT ps.name FROM deals d JOIN pipeline_stages ps ON ps.id=d.stage_id WHERE d.client_id=cl.id ORDER BY d.updated_at DESC LIMIT 1) AS stage,
       (SELECT MIN(t.due_at) FROM tasks t WHERE t.client_id=cl.id AND t.done_at IS NULL) AS next_due
-    FROM clients cl WHERE ${where.join(' AND ')} ORDER BY cl.updated_at DESC LIMIT 500`).bind(...binds).all()).results;
+    FROM clients cl WHERE ${where.join(' AND ')} ORDER BY cl.updated_at DESC LIMIT 500`).bind(user.id, ...binds).all()).results;
   // Clients never see internal pipeline or task data.
-  if (!isStaff(user)) for (const row of rows) { delete row.stage; delete row.next_due; }
+  if (!isStaff(user)) for (const row of rows) { delete row.stage; delete row.next_due; delete row.mine; }
   return c.json({ clients: rows });
 });
 
@@ -86,7 +89,7 @@ r.post('/', async (c) => {
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(id, f.name, f.industry, f.website, f.phone, f.email, f.address, f.city, f.state, f.zip, f.status, f.source, user.id, t, t)];
   const repId = user.role === 'rep' ? user.id : body.repId || null;
   if (repId) {
-    if (user.role === 'admin' && !(await db.prepare("SELECT 1 FROM users WHERE id=? AND role='rep'").bind(repId).first())) fail(400, 'Choose a valid sales rep.');
+    if (user.role === 'admin' && !(await db.prepare("SELECT 1 FROM users WHERE id=? AND role IN ('admin','rep') AND status<>'disabled'").bind(repId).first())) fail(400, 'Choose a valid sales rep.');
     stmts.push(db.prepare('INSERT INTO assignments (client_id, user_id, created_at) VALUES (?,?,?)').bind(id, repId, t));
   }
   const contact = body.contact;
@@ -98,8 +101,11 @@ r.post('/', async (c) => {
     stmts.push(db.prepare("INSERT INTO deals (id, client_id, owner_id, stage_id, title, created_at, updated_at) VALUES (?,?,?,'new',?,?,?)")
       .bind(newId(), id, repId || user.id, `${f.name} — new business`, t, t));
   }
+  const adsId = body.googleAdsId ? cleanCustomerId(body.googleAdsId) : null;
+  if (body.googleAdsId && !adsId) fail(400, 'Enter the 10-digit Google Ads customer ID, like 123-456-7890.');
   await db.batch(stmts);
   await logActivity(db, { clientId: id, actorId: user.id, kind: 'client_created', summary: `Created ${f.name}` });
+  if (adsId) await setAdsAccount(c, { id, ads_customer_id: null }, adsId, user);
   return c.json({ id }, 201);
 });
 

@@ -229,7 +229,7 @@ function CommissionSettings() {
             <Field label="Paid on"><select class="select" value={edit.basis} onChange={(e) => setEdit({ ...edit, basis: e.target.value })}><option value="setup">Setup fees</option><option value="monthly">Monthly fees</option><option value="both">Setup + monthly</option></select></Field>
             {edit.basis !== 'setup' && <Field label="Months of monthly fees"><input class="input" inputMode="numeric" value={edit.months ?? ''} onInput={(e) => setEdit({ ...edit, months: e.target.value })} placeholder="e.g. 3" /></Field>}
             <Field label="Earned"><select class="select" value={edit.trigger} onChange={(e) => setEdit({ ...edit, trigger: e.target.value })}>{Object.entries(TRIGGERS).map(([k, v]) => <option value={k}>{v}</option>)}</select></Field>
-            <Field label="Applies to"><select class="select" value={edit.rep_id || ''} onChange={(e) => setEdit({ ...edit, rep_id: e.target.value })}><option value="">All reps</option>{(team.data?.team || []).filter((t) => t.role === 'rep').map((t) => <option value={t.id}>{t.name}</option>)}</select></Field>
+            <Field label="Applies to"><select class="select" value={edit.rep_id || ''} onChange={(e) => setEdit({ ...edit, rep_id: e.target.value })}><option value="">All reps</option>{(team.data?.team || []).filter((t) => t.role === 'rep' || t.role === 'admin').map((t) => <option value={t.id}>{t.name}</option>)}</select></Field>
             <label class="check full"><input type="checkbox" checked={edit.active} onChange={(e) => setEdit({ ...edit, active: e.target.checked })} />Rule is on</label>
             <label class="check full"><input type="checkbox" checked={edit.approved} onChange={(e) => setEdit({ ...edit, approved: e.target.checked })} />Approved: this is the agreed rule (removes the “provisional” label)</label>
           </div>
@@ -242,14 +242,18 @@ function CommissionSettings() {
 
 // ---------- Commissions report ----------
 export function Commissions({ user }) {
-  const { loading, data, error, reload } = useLoad('/sales/commissions');
+  const [mine, setMine] = useState(false);
+  const { loading, data, error, reload } = useLoad(`/sales/commissions${mine ? '?mine=1' : ''}`, [mine]);
   if (loading) return <div class="page"><Loading /></div>;
   if (error) return <div class="page"><ErrorBox error={error} retry={reload} /></div>;
   return (
     <div class="page">
       <div class="page-head">
         <div><div class="eyebrow">Sales</div><h1>Commissions</h1><p class="sub">Calculated from won deals and the configured rules. Each line shows the rule and deal it came from.</p></div>
-        <div class="stat" style="min-width:200px"><div class="label">{user.role === 'rep' ? 'Your total' : 'Total'}{data.anyProvisional ? ' (provisional)' : ''}</div><div class="value">{money(data.totalCents)}</div></div>
+        <div class="row" style="align-items:stretch">
+          {user.role === 'admin' && <select class="select" value={mine ? 'mine' : 'all'} onChange={(e) => setMine(e.target.value === 'mine')} aria-label="Whose commissions"><option value="all">Everyone</option><option value="mine">Only mine</option></select>}
+          <div class="stat" style="min-width:200px"><div class="label">{user.role === 'rep' || mine ? 'Your total' : 'Total'}{data.anyProvisional ? ' (provisional)' : ''}</div><div class="value">{money(data.totalCents)}</div></div>
+        </div>
       </div>
       {data.anyProvisional && <div class="alert warn mb">Some or all of these numbers use rules that haven’t been approved yet, so they’re estimates, not payouts.</div>}
       {data.notYetCalculated && <div class="alert info mb">{data.notYetCalculated}</div>}
@@ -331,11 +335,64 @@ function PaymentSettings() {
       <IntegrationCard title="Google speed test and Business Profile" item={data.google} task="Task 10" path="google"
         about="Website checks use Google PageSpeed and Google Places. Without a key, the speed test runs only when Google's shared limit allows, and the Google profile check is skipped."
         okText={() => 'PageSpeed and Places both answered.'} testNote="Runs one speed test and one Places search." />
+      <GoatIntegrations />
+      <GoogleAdsIntegration />
       <section class="card">
         <div class="row between"><h2 style="margin:0">Email</h2><span class={`badge ${data.email.configured ? 'good' : 'bad'}`}>{data.email.configured ? 'Set up' : 'Not set up'}</span></div>
         <p class="muted" style="margin-bottom:0">{data.email.configured ? 'Invites, receipts and agreement notices are emailed from info@detcorddigital.com.' : 'Without email, invite links are shown to you to share by hand, and receipts are not sent. Bob sets this up in Task 2.'}</p>
       </section>
     </div>
+  );
+}
+
+// Google Ads API access for manager-account link requests.
+function GoogleAdsIntegration() {
+  const { data, reload } = useLoad('/settings/integrations/google-ads');
+  const act = useAction();
+  if (!data) return null;
+  const send = () => act.run(async () => {
+    const r = await api('POST', '/settings/integrations/google-ads/send-waiting');
+    toast(`Sent ${r.sent} request${r.sent === 1 ? '' : 's'}${r.failed ? `, ${r.failed} failed` : ''}.`);
+    reload();
+  });
+  return (
+    <>
+      <IntegrationCard title="Google Ads (manager account links)" item={data} task="Google Ads setup" path="google-ads"
+        about={`Sends link requests from Detcord's manager account (${data.manager}) to each client's Google Ads account. Without it, customer IDs are saved and the requests wait.`}
+        okText={(t) => `Manager account ${t.name || ''} ${t.id || ''}`} testNote="Reads the manager account. Nothing is sent." />
+      {data.waiting > 0 && (
+        <section class="card row between">
+          <span>{data.waiting} client{data.waiting === 1 ? ' is' : 's are'} waiting for a Google Ads link request.</span>
+          <button class="btn sm" disabled={!data.configured || act.busy} onClick={send}>Send them now</button>
+          {act.error && <div class="alert bad" style="width:100%">{act.error}</div>}
+        </section>
+      )}
+    </>
+  );
+}
+
+// GOAT Command: Claude drafts plans; requests arrive by email and text.
+function GoatIntegrations() {
+  const { data } = useLoad('/settings/integrations/goat');
+  if (!data) return null;
+  const claude = { ...data.claude, missing: data.claude.configured ? [] : ['ANTHROPIC_API_KEY'] };
+  const inbound = (x) => STATE[x.state] || STATE.untested;
+  return (
+    <>
+      <IntegrationCard title="Claude (GOAT plans)" item={claude} task="Task 6" path="claude"
+        about="Drafts a plan for each GOAT request so the client can approve it. Without it, your team writes every plan by hand."
+        okText={(t) => `Sample plan: “${t.sample}”`} testNote="Drafts one sample plan. Nothing is sent to anyone." />
+      <IntegrationCard title="Deepgram (meeting transcripts)" item={{ ...data.deepgram, missing: data.deepgram.configured ? [] : ['DEEPGRAM_API_KEY'] }} task="Task 6" path="deepgram"
+        about="Turns recorded sales meetings into transcripts with speakers, so Claude can draft CRM notes. Without it, recordings are kept but not transcribed."
+        okText={() => 'Deepgram accepted the key.'} testNote="Checks the key with Deepgram. No audio is sent." />
+      <section class="card">
+        <h2>GOAT requests by email and text</h2>
+        <dl class="kv">
+          <dt>Email</dt><dd><span class={`badge ${inbound(data.email)[1]}`}>{data.email.state === 'connected' ? 'Receiving' : 'Nothing received yet'}</span>{data.email.lastReceived && <div class="small muted">Last email {dateTime(data.email.lastReceived.at)}</div>}<div class="small muted">Bob routes goat@ to the portal in Task 7. It shows as receiving after the first real email arrives.</div></dd>
+          <dt>Text</dt><dd><span class={`badge ${inbound(data.sms)[1]}`}>{data.sms.state === 'connected' ? 'Receiving' : data.sms.state === 'not_configured' ? 'Not set up' : 'Nothing received yet'}</span>{data.sms.lastReceived && <div class="small muted">Last text {dateTime(data.sms.lastReceived.at)}</div>}<div class="small muted">Needs TWILIO_AUTH_TOKEN and this incoming-message webhook on the Twilio number: <span style="font-family:monospace">{data.sms.webhook}</span></div></dd>
+        </dl>
+      </section>
+    </>
   );
 }
 

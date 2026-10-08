@@ -76,7 +76,7 @@ r.get('/dashboard', async (c) => {
       (SELECT COUNT(*) FROM assignments a WHERE a.user_id=u.id) AS clients,
       (SELECT COUNT(*) FROM deals d JOIN pipeline_stages ps ON ps.id=d.stage_id WHERE d.owner_id=u.id AND ps.outcome='open') AS open_deals,
       (SELECT COUNT(*) FROM tasks t WHERE t.owner_id=u.id AND t.done_at IS NULL AND t.due_at < ?) AS overdue
-    FROM users u WHERE u.role='rep' AND u.status<>'disabled' ORDER BY u.name`).bind(sod).all()).results;
+    FROM users u WHERE u.status<>'disabled' AND (u.role='rep' OR (u.role='admin' AND (EXISTS (SELECT 1 FROM assignments a WHERE a.user_id=u.id) OR EXISTS (SELECT 1 FROM deals d WHERE d.owner_id=u.id)))) ORDER BY u.name`).bind(sod).all()).results;
   const activity = (await db.prepare(`SELECT a.*, u.name AS actor, cl.name AS client_name FROM activity a LEFT JOIN users u ON u.id=a.actor_id LEFT JOIN clients cl ON cl.id=a.client_id
     ORDER BY a.created_at DESC LIMIT 15`).all()).results;
   const emails = (await db.prepare('SELECT id,provider_id,recipient,subject,status,error,created_at,updated_at FROM outbound_emails WHERE is_alert=0 ORDER BY created_at DESC LIMIT 20').all()).results;

@@ -9,7 +9,7 @@ const MAX_BYTES = 25 * 1024 * 1024;
 const PURPOSES = ['logo', 'photo', 'flyer', 'document', 'report', 'contract', 'website', 'social', 'other'];
 
 // Allowed types. Images and PDFs are shown inline; everything else downloads.
-const TYPES = {
+export const TYPES = {
   'image/png': 'inline', 'image/jpeg': 'inline', 'image/webp': 'inline', 'image/gif': 'inline', 'image/heic': 'attachment', 'image/heif': 'attachment',
   'application/pdf': 'inline',
   'application/msword': 'attachment', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'attachment',
@@ -19,13 +19,13 @@ const TYPES = {
   'application/zip': 'attachment', 'application/postscript': 'attachment', 'application/illustrator': 'attachment', 'image/vnd.adobe.photoshop': 'attachment',
   'video/mp4': 'attachment', 'video/quicktime': 'attachment',
 };
-const EXT = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', heic: 'image/heic', heif: 'image/heif', pdf: 'application/pdf',
+export const EXT = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', heic: 'image/heic', heif: 'image/heif', pdf: 'application/pdf',
   doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', xls: 'application/vnd.ms-excel',
   xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', ppt: 'application/vnd.ms-powerpoint', pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   csv: 'text/csv', txt: 'text/plain', zip: 'application/zip', eps: 'application/postscript', ai: 'application/illustrator', psd: 'image/vnd.adobe.photoshop', mp4: 'video/mp4', mov: 'video/quicktime' };
 
 // Check the first bytes for types a browser would render, so a renamed file cannot pose as an image or PDF.
-function sniff(bytes, type) {
+export function sniff(bytes, type) {
   const b = (i) => bytes[i];
   const at = (i, s) => [...s].every((ch, k) => b(i + k) === ch.charCodeAt(0));
   switch (type) {
@@ -38,7 +38,24 @@ function sniff(bytes, type) {
   }
 }
 
-const safeName = (name) => String(name || 'file').replace(/[\\/\u0000-\u001f"<>|:*?]+/g, '_').replace(/\s+/g, ' ').trim().slice(0, 160) || 'file';
+export const safeName = (name) => String(name || 'file').replace(/[\\/\u0000-\u001f"<>|:*?]+/g, '_').replace(/\s+/g, ' ').trim().slice(0, 160) || 'file';
+
+// Saves a file that arrived without a browser upload (an email or text attachment).
+// Returns the media id, or null when the type is not allowed or the bytes don't match it.
+export async function storeInboundFile(env, { clientId, filename, contentType, bytes, purpose = 'other', note = null }) {
+  if (!env.MEDIA || !clientId) return null;
+  const name = safeName(filename);
+  const ext = name.includes('.') ? name.split('.').pop().toLowerCase() : '';
+  const declared = String(contentType || '').split(';')[0].trim().toLowerCase();
+  const type = TYPES[declared] ? declared : EXT[ext];
+  if (!type || !bytes?.length || bytes.length > MAX_BYTES || !sniff(bytes, type)) return null;
+  const id = newId();
+  const key = `clients/${clientId}/${id}`;
+  await env.MEDIA.put(key, bytes, { httpMetadata: { contentType: type }, customMetadata: { filename: name, clientId, uploader: 'inbound' } });
+  await env.DB.prepare('INSERT INTO media (id, client_id, uploader_id, filename, content_type, size, r2_key, visibility, purpose, note, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
+    .bind(id, clientId, null, name, type, bytes.length, key, 'shared', purpose, note, now()).run();
+  return id;
+}
 
 function bucket(c) {
   if (!c.env.MEDIA) fail(503, 'File storage is not set up yet.');

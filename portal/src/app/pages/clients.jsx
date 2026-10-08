@@ -8,6 +8,9 @@ import { ContractsTab } from './contracts.jsx';
 import { BillingTab } from './billing.jsx';
 import { FilesPanel } from './files.jsx';
 import { AuditsTab } from './audits.jsx';
+import { GoatTab } from './goat.jsx';
+import { MeetingsTab } from './meetings.jsx';
+import { GoogleAdsCard } from './google-ads.jsx';
 
 export function IndustrySelect({ value, onChange, required }) {
   return (
@@ -30,7 +33,8 @@ export function ClientsList({ user }) {
   const [status, setStatus] = useState(qs.status || '');
   const params = new URLSearchParams({ ...(q && { q }), ...(status && { status }) }).toString();
   const { loading, data, error, reload } = useLoad(`/clients${params ? `?${params}` : ''}`, [params]);
-  const rows = (data?.clients || []).filter((c) => !qs.unassigned || !c.reps);
+  const [mine, setMine] = useState(false);
+  const rows = (data?.clients || []).filter((c) => (!qs.unassigned || !c.reps) && (!mine || c.mine));
   return (
     <div class="page">
       <div class="page-head">
@@ -43,6 +47,7 @@ export function ClientsList({ user }) {
           <option value="">All statuses</option>
           {Object.entries(STATUS_LABEL).map(([k, v]) => <option value={k}>{v}</option>)}
         </select>
+        {user.role === 'admin' && <label class="check"><input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} />Only my clients</label>}
       </div>
       {loading ? <Loading /> : error ? <ErrorBox error={error} retry={reload} /> : !rows.length ? (
         <div class="card"><Empty goat title={q || status ? 'No clients match' : 'No clients yet'} action={!q && !status && <a class="btn" href="/clients/new">Add your first client</a>}>
@@ -75,7 +80,7 @@ export function ClientsList({ user }) {
 
 // ---------- New or existing ----------
 export function NewClient({ user }) {
-  const [f, setF] = useState({ name: '', industry: '', phone: '', website: '', city: '', email: '', contactName: '', contactTitle: '', contactEmail: '', contactPhone: '', decisionMaker: true, repId: '', source: '', runCheck: true });
+  const [f, setF] = useState({ name: '', industry: '', phone: '', website: '', city: '', email: '', contactName: '', contactTitle: '', contactEmail: '', contactPhone: '', decisionMaker: true, repId: '', source: '', googleAdsId: '', runCheck: true });
   const [matches, setMatches] = useState({ matches: [], hidden: 0 });
   const team = useLoad(user.role === 'admin' ? '/team' : null);
   const { busy, error, run } = useAction();
@@ -96,6 +101,7 @@ export function NewClient({ user }) {
       const { id } = await api('POST', '/clients', {
         name: f.name, industry: f.industry || null, phone: f.phone, website: f.website, city: f.city, email: f.email, source: f.source,
         repId: f.repId || undefined,
+        googleAdsId: f.googleAdsId || undefined,
         contact: f.contactName ? { name: f.contactName, title: f.contactTitle, email: f.contactEmail, phone: f.contactPhone, decisionMaker: f.decisionMaker } : undefined,
       });
       toast(`${f.name} added.`);
@@ -122,12 +128,13 @@ export function NewClient({ user }) {
           <Field label="Website"><input class="input" placeholder="example.com" value={f.website} onInput={set('website')} /></Field>
           <Field label="Business email"><input class="input" type="email" placeholder="owner@example.com" value={f.email} onInput={set('email')} /></Field>
           <Field label="City" help="used for the local search check"><input class="input" value={f.city} onInput={set('city')} /></Field>
+          <Field label="Google Ads customer ID" help="optional; Detcord's manager account sends them a link request"><input class="input" inputMode="numeric" placeholder="123-456-7890" value={f.googleAdsId} onInput={set('googleAdsId')} /></Field>
           <Field label="Lead source" help="optional"><input class="input" placeholder="Referral, website, cold call…" value={f.source} onInput={set('source')} /></Field>
           {user.role === 'admin' && (
             <Field label="Assigned rep" help="optional">
               <select class="select" value={f.repId} onChange={set('repId')}>
                 <option value="">No rep yet</option>
-                {(team.data?.team || []).filter((t) => t.role === 'rep').map((t) => <option value={t.id}>{t.name}</option>)}
+                {(team.data?.team || []).filter((t) => (t.role === 'rep' || t.role === 'admin') && t.status !== 'disabled').map((t) => <option value={t.id}>{t.id === user.id ? `${t.name} (me)` : t.name}</option>)}
               </select>
             </Field>
           )}
@@ -150,7 +157,7 @@ export function NewClient({ user }) {
 }
 
 // ---------- Client record ----------
-const TABS = [['overview', 'Overview'], ['audits', 'Website check'], ['discovery', 'Discovery'], ['deals', 'Deals'], ['contracts', 'Agreements'], ['billing', 'Billing'], ['files', 'Files'], ['tasks', 'Tasks'], ['notes', 'Notes'], ['access', 'Portal access']];
+const TABS = [['overview', 'Overview'], ['goat', 'Requests'], ['audits', 'Website check'], ['meetings', 'Meetings'], ['discovery', 'Discovery'], ['deals', 'Deals'], ['contracts', 'Agreements'], ['billing', 'Billing'], ['files', 'Files'], ['tasks', 'Tasks'], ['notes', 'Notes'], ['access', 'Portal access']];
 
 export function ClientRecord({ id, user }) {
   if (user.role === 'client') return <ClientOwnRecord id={id} />;
@@ -194,6 +201,8 @@ function StaffClientRecord({ id, user }) {
       {tab === 'contracts' && <ContractsTab clientId={c.id} user={user} />}
       {tab === 'billing' && <BillingTab clientId={c.id} user={user} />}
       {tab === 'files' && <FilesPanel clientId={c.id} user={user} />}
+      {tab === 'goat' && <GoatTab client={c} user={user} />}
+      {tab === 'meetings' && <MeetingsTab client={c} />}
       {tab === 'audits' && <AuditsTab client={c} user={user} onChanged={reload} />}
     </div>
   );
@@ -255,6 +264,7 @@ function Overview({ data, user, reload }) {
             <dt>Added</dt><dd>{date(c.created_at)}</dd>
           </dl>
         </section>
+        <GoogleAdsCard clientId={c.id} />
         <ContactsCard data={data} reload={reload} />
         <TeamCard data={data} user={user} reload={reload} />
       </div>
@@ -368,7 +378,7 @@ function TeamCard({ data, user, reload }) {
         <div class="row mt">
           <select class="select" style="flex:1" value={pick} onChange={(e) => setPick(e.target.value)} aria-label="Assign a rep">
             <option value="">Assign a rep…</option>
-            {(team.data?.team || []).filter((t) => t.role === 'rep' && !assigned.has(t.id)).map((t) => <option value={t.id}>{t.name}</option>)}
+            {(team.data?.team || []).filter((t) => (t.role === 'rep' || t.role === 'admin') && t.status !== 'disabled' && !assigned.has(t.id)).map((t) => <option value={t.id}>{t.id === user.id ? `${t.name} (me)` : t.name}</option>)}
           </select>
           <button class="btn sm secondary" disabled={!pick} onClick={assign}>Assign</button>
         </div>

@@ -12,6 +12,11 @@ import billing from './routes/billing.js';
 import media from './routes/media.js';
 import audits from './routes/audits.js';
 import emailDelivery from './routes/email-delivery.js';
+import goat from './routes/goat.js';
+import inbound, { handleEmail } from './routes/inbound.js';
+import meetings from './routes/meetings.js';
+import layouts from './routes/layouts.js';
+import googleAds from './routes/google-ads.js';
 
 const app = new Hono();
 
@@ -33,6 +38,7 @@ app.use('/api/*', async (c, next) => {
 app.use('/api/*', loadUser);
 
 app.route('/api', emailDelivery);
+app.route('/api', inbound);
 app.route('/api/auth', auth);
 app.route('/api/users', users);
 app.route('/api/clients', clients);
@@ -43,6 +49,10 @@ app.route('/api', contracts);
 app.route('/api', billing);
 app.route('/api', media);
 app.route('/api', audits);
+app.route('/api', goat);
+app.route('/api', meetings);
+app.route('/api', layouts);
+app.route('/api', googleAds);
 
 app.all('/api/*', (c) => c.json({ error: 'Not found.' }, 404));
 
@@ -61,7 +71,11 @@ export default {
     if (!out.headers.has('X-Frame-Options')) out.headers.set('X-Frame-Options', 'DENY');
     out.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
     out.headers.set('Strict-Transport-Security', 'max-age=31536000');
-    out.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    out.headers.set('Permissions-Policy', 'camera=(), microphone=(self), geolocation=()');
     return out;
+  },
+  // GOAT requests sent by email, routed here by Cloudflare Email Routing.
+  async email(message, env, ctx) {
+    await handleEmail(message, env, ctx);
   },
 };
