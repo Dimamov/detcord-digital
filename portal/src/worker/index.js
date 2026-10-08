@@ -18,6 +18,8 @@ import meetings from './routes/meetings.js';
 import layouts from './routes/layouts.js';
 import googleAds from './routes/google-ads.js';
 import industries from './routes/industries.js';
+import social from './routes/social.js';
+import reports from './routes/reports.js';
 
 const app = new Hono();
 
@@ -55,6 +57,8 @@ app.route('/api', meetings);
 app.route('/api', layouts);
 app.route('/api', googleAds);
 app.route('/api', industries);
+app.route('/api', social);
+app.route('/api', reports);
 
 app.all('/api/*', (c) => c.json({ error: 'Not found.' }, 404));
 

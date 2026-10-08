@@ -2,6 +2,7 @@ import { useLoad, date, money } from '../lib.js';
 import { Loading, ErrorBox, Empty, Avatar, Icon } from '../ui.jsx';
 import { session } from '../lib.js';
 import { ReportsCard } from './audits.jsx';
+import { MonthlyReportsCard } from './reports.jsx';
 import { GoatCard } from './goat.jsx';
 import { Board } from '../board.jsx';
 
@@ -30,9 +31,10 @@ function BusinessView({ id, user, others }) {
         </div>
       </div>
 
-      <ActionItems />
+      <ActionItems clientId={client.id} />
       <Board page="client-home" cards={[
         { id: 'reports', title: 'Reports', col: 'top', node: <ReportsCard /> },
+        { id: 'monthly', title: 'Monthly reports', col: 'top', node: <MonthlyReportsCard /> },
         { id: 'goat', title: 'Ask the GOAT', col: 'top', node: <GoatCard clientId={client.id} user={user} /> },
         { id: 'updates', title: 'Updates from Detcord', col: 'main', node: (
           <section class="card">
@@ -93,12 +95,14 @@ function BusinessView({ id, user, others }) {
 }
 
 // Agreements waiting for a signature and invoices with a balance, front and center.
-function ActionItems() {
+function ActionItems({ clientId }) {
   const contracts = useLoad('/contracts');
   const invoices = useLoad('/invoices');
+  const social = useLoad(`/clients/${clientId}/social`, [clientId]);
+  const posts = (social.data?.posts || []).filter((p) => p.status === 'pending_approval');
   const toSign = (contracts.data?.contracts || []).filter((c) => c.status === 'sent');
   const due = (invoices.data?.invoices || []).filter((i) => i.status === 'open');
-  if (!toSign.length && !due.length) return null;
+  if (!toSign.length && !due.length && !posts.length) return null;
   return (
     <section class="card mb attention">
       <h2>Needs your attention</h2>
@@ -115,6 +119,13 @@ function ActionItems() {
             <Icon name="card" />
             <div style="flex:1"><div class="title">{i.title}</div><div class="meta">{i.number} · due {date(i.due_at)}</div></div>
             <strong>{money(i.total_cents - i.paid_cents)}</strong>
+          </a>
+        ))}
+        {posts.map((p) => (
+          <a class="list-item" href={`/social/${p.id}`}>
+            <Icon name="globe" />
+            <div style="flex:1;min-width:0"><div class="title" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Approve your social post: {p.content}</div><div class="meta">Nothing is posted until you approve</div></div>
+            <span class="btn sm">Review</span>
           </a>
         ))}
       </div>

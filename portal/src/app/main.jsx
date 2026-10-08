@@ -16,6 +16,8 @@ import { FilesPage } from './pages/files.jsx';
 import { AuditPage, ReportPage } from './pages/audits.jsx';
 import { GoatPage, GoatRequestPage } from './pages/goat.jsx';
 import { MeetingPage } from './pages/meetings.jsx';
+import { SocialPage, SocialPostPage } from './pages/social.jsx';
+import { ReportsPage, MonthlyReportPage } from './pages/reports.jsx';
 
 const PUBLIC = [
   ['/login', Login],
@@ -43,16 +45,20 @@ const PRIVATE = [
   ['/invoices/:id', InvoicePage, ['admin', 'rep', 'client']],
   ['/files', FilesPage, ['client']],
   ['/audits/:id', AuditPage, ['admin', 'rep']],
+  ['/reports', ReportsPage, ['admin', 'rep', 'client']],
+  ['/reports/monthly/:id', MonthlyReportPage, ['admin', 'rep', 'client']],
   ['/reports/:id', ReportPage, ['admin', 'rep', 'client']],
   ['/goat', GoatPage, ['admin', 'rep', 'client']],
   ['/goat/:id', GoatRequestPage, ['admin', 'rep', 'client']],
   ['/meetings/:id', MeetingPage, ['admin', 'rep']],
+  ['/social', SocialPage, ['client']],
+  ['/social/:id', SocialPostPage, ['admin', 'rep', 'client']],
 ];
 
 const NAV = {
   admin: [['/', 'home', 'Detcord Today'], ['/clients', 'clients', 'Clients'], ['/goat', 'bolt', 'Requests'], ['/pipeline', 'pipeline', 'Pipeline'], ['/tasks', 'tasks', 'Tasks'], ['/invoices', 'card', 'Invoices'], '|Agency', ['/team', 'team', 'Team'], ['/commissions', 'money', 'Commissions'], ['/settings', 'settings', 'Settings']],
   rep: [['/', 'home', 'My Day'], ['/clients', 'clients', 'My clients'], ['/goat', 'bolt', 'Requests'], ['/pipeline', 'pipeline', 'Pipeline'], ['/tasks', 'tasks', 'Tasks'], ['/invoices', 'card', 'Invoices'], ['/commissions', 'money', 'Commissions']],
-  client: [['/', 'home', 'Home'], ['/goat', 'bolt', 'Ask the GOAT'], ['/invoices', 'card', 'Invoices'], ['/files', 'folder', 'Files']],
+  client: [['/', 'home', 'Home'], ['/goat', 'bolt', 'Ask the GOAT'], ['/social', 'globe', 'Social'], ['/reports', 'doc', 'Reports'], ['/invoices', 'card', 'Invoices'], ['/files', 'folder', 'Files']],
 };
 
 function ThemeToggle() {
@@ -102,8 +108,8 @@ function Shell({ user, children, path }) {
         </div>
         {children}
         {links.length > 1 && (
-          <nav class="bottom-nav">
-            {links.slice(0, 5).map((i) => <a href={i[0]} aria-current={current(i[0])}><Icon name={i[1]} size={20} />{i[2].replace('Detcord ', '').replace('My clients', 'Clients')}</a>)}
+          <nav class="bottom-nav" style={`grid-template-columns:repeat(${Math.min(links.length, 6)},1fr)`}>
+            {links.slice(0, 6).map((i) => <a href={i[0]} aria-current={current(i[0])}><Icon name={i[1]} size={20} />{i[2].replace('Detcord ', '').replace('My clients', 'Clients').replace('Ask the GOAT', 'GOAT')}</a>)}
           </nav>
         )}
       </div>

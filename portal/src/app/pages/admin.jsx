@@ -3,6 +3,7 @@ import { useLoad, api, toast, money, dollars, ago, date, dateTime, query } from 
 import { Loading, ErrorBox, Empty, Icon, Field, Dialog, Avatar, useAction } from '../ui.jsx';
 import { InviteResult } from './clients.jsx';
 import { SERVICE_CATEGORIES } from '../../shared/services.js';
+import { BulkReports } from './reports.jsx';
 
 const ROLE = { admin: 'Admin', rep: 'Sales rep', client: 'Client' };
 
@@ -93,13 +94,14 @@ export function Settings() {
     <div class="page">
       <div class="page-head"><div><div class="eyebrow">Agency</div><h1>Settings</h1></div></div>
       <div class="tabs">
-        {[['services', 'Services and prices'], ['pipeline', 'Pipeline stages'], ['commissions', 'Commission rules'], ['company', 'Company'], ['payments', 'Integrations']].map(([k, l]) => <button aria-selected={tab === k} onClick={() => setTab(k)}>{l}</button>)}
+        {[['services', 'Services and prices'], ['pipeline', 'Pipeline stages'], ['commissions', 'Commission rules'], ['company', 'Company'], ['reports', 'Monthly reports'], ['payments', 'Integrations']].map(([k, l]) => <button aria-selected={tab === k} onClick={() => setTab(k)}>{l}</button>)}
       </div>
       {tab === 'company' && <CompanySettings />}
       {tab === 'payments' && <PaymentSettings />}
       {tab === 'services' && <ServicesSettings />}
       {tab === 'pipeline' && <StageSettings />}
       {tab === 'commissions' && <CommissionSettings />}
+      {tab === 'reports' && <BulkReports />}
     </div>
   );
 }
@@ -337,6 +339,7 @@ function PaymentSettings() {
         okText={() => 'PageSpeed and Places both answered.'} testNote="Runs one speed test and one Places search." />
       <GoatIntegrations />
       <GoogleAdsIntegration />
+      <ZernioIntegration />
       <section class="card">
         <div class="row between"><h2 style="margin:0">Email</h2><span class={`badge ${data.email.configured ? 'good' : 'bad'}`}>{data.email.configured ? 'Set up' : 'Not set up'}</span></div>
         <p class="muted" style="margin-bottom:0">{data.email.configured ? 'Invites, receipts and agreement notices are emailed from info@detcorddigital.com.' : 'Without email, invite links are shown to you to share by hand, and receipts are not sent. Bob sets this up in Task 2.'}</p>
@@ -368,6 +371,17 @@ function GoogleAdsIntegration() {
         </section>
       )}
     </>
+  );
+}
+
+// Zernio publishes approved social posts to clients' connected accounts.
+function ZernioIntegration() {
+  const { data } = useLoad('/settings/integrations/zernio');
+  if (!data) return null;
+  return (
+    <IntegrationCard title="Zernio (social posting)" item={data} task="Zernio setup" path="zernio"
+      about="Connects clients' Facebook, Instagram, Google Business, LinkedIn and X accounts and publishes posts after the client approves them. Without it, posts can be written and approved but not published."
+      okText={(t) => `Zernio answered (${t.profiles} profile${t.profiles === 1 ? '' : 's'}).`} testNote="Lists Zernio profiles. Nothing is posted." />
   );
 }
 

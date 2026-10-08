@@ -58,9 +58,10 @@ secrets are set separately on the `detcord-portal` Worker; it never shares stagi
 | `GOOGLE_API_KEY` | website checks: Google PageSpeed and the Google Business Profile lookup (Places API (New)) | the speed test runs only within Google's shared quota; the Google profile check is skipped and the report says so |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_API_KEY_SID`, `TWILIO_API_KEY_SECRET`, `TWILIO_MESSAGING_SERVICE_SID` | texting website check reports and GOAT replies | Text says texting isn't set up; staff get the portal link to pass on |
 | `TWILIO_AUTH_TOKEN` | verifying incoming GOAT texts (Twilio signs webhooks with the auth token) | the text webhook answers 503 and no texts are accepted |
-| `ANTHROPIC_API_KEY` | Claude drafts a plan for each GOAT request | staff write every plan by hand |
+| `ANTHROPIC_API_KEY` | Claude drafts a plan for each GOAT request and the monthly client reports | staff write every plan and report by hand |
 | `GOOGLE_ADS_CLIENT_ID`, `GOOGLE_ADS_CLIENT_SECRET`, `GOOGLE_ADS_REFRESH_TOKEN` (`GOOGLE_ADS_DEVELOPER_TOKEN` optional; Google now grants access to the Cloud project) | link requests from Detcord's manager account (MCC 448-262-6468, override with `GOOGLE_ADS_MANAGER_ID`) to client Google Ads accounts; the refresh token belongs to a Google user who can manage the MCC | customer IDs are saved as "Waiting for Google Ads setup"; Settings sends them all once the keys are in |
 | `DEEPGRAM_API_KEY` | Transcribes recorded sales meetings (Claude then drafts the notes) | recordings are kept but not transcribed |
+| `ZERNIO_API_KEY` | social posting through Zernio: connecting client accounts and publishing approved posts | Social says posting isn't set up; posts can be written and approved but not published |
 
 Add them in Cloudflare under **Workers & Pages → (worker) → Settings → Variables and Secrets** (type Secret).
 `CLOVER_API_BASE` is a plain var: sandbox on staging, `https://api.clover.com` in production. Clover's webhook
@@ -68,7 +69,7 @@ URL is `<portal URL>/api/webhooks/clover`. **Settings → Payments** shows the C
 **Test connection** button. Clover only shows as connected after that test succeeds.
 
 Files are stored in R2 (`MEDIA` binding: `detcord-portal-media-staging` / `detcord-portal-media`). Wrangler
-creates the bucket on the first deploy. Later phases add Anthropic, Google OAuth and Zernio secrets.
+creates the bucket on the first deploy. Later phases add Google OAuth secrets.
 
 ## Website checks
 
@@ -118,6 +119,51 @@ Michigan legal review: the consent wording on that checkbox and whether to also 
    chosen answers. Nothing is saved or sent before that, and the follow-up email is only a draft to copy.
 
 Meetings are staff only. The recording can be deleted on its own (the transcript stays) or with the whole meeting.
+
+## Social posting
+
+Staff write a post from a client record (**Social** tab): the text (optionally started from a short brief with
+**Draft with Claude**, labelled as a Claude draft), photos or videos from the client's shared files, the connected
+accounts to post to, and publish now or a scheduled time (Detroit time). A post can be linked to a GOAT request; the
+request's timeline then shows what Zernio reported, with links.
+
+1. **Send for approval** shows the client exactly what will go out: text, media, each account and when. Clients approve or
+   ask for changes with a note on their **Social** page. An admin can record an approval given outside the portal, only
+   with a note ("approved by phone on ..."), which is stored and shown.
+2. Approval is bound to a SHA-256 hash of the text, media, accounts and time. If staff change any of them afterwards, the
+   approval is cleared and the client approves again.
+3. **Publish** (or **Schedule**) checks the hash again on the server, checks with Zernio that the accounts are still
+   connected to this client, copies the media to Zernio and creates the post with an `Idempotency-Key` of the post id and
+   approved hash, so a retry can't post twice. The status shown is what Zernio reports (publishing, scheduled, published,
+   partly published, failed) with per-platform links and errors. It is refreshed when someone opens the post or presses
+   **Check status**, at most every 30 seconds. There is no Zernio webhook yet.
+
+Each client gets one Zernio profile, created the first time someone connects an account. Clients connect Facebook,
+Instagram, Google Business Profile, LinkedIn and X from their Social page; staff can do it from the client record or
+copy a connect link to send. Zernio sends the browser back to the portal, which then reads the accounts from Zernio.
+Clients only see posts sent to them, never drafts. **Settings → Integrations** has a Zernio card with **Test connection**;
+it shows as connected only after that test passes.
+
+## Monthly reports
+
+Staff pick a month on a client record (**Reports** tab) and press Generate. The portal gathers what it recorded for that
+client and month: GOAT requests received and finished (with their done notes and links), website checks and the score
+change since the previous check, services started, active and ended, invoices issued and payments received, agreements
+signed, meetings (titles and dates; summaries only if staff tick the box, transcripts never), tasks completed, updates
+posted and files shared. Claude (when `ANTHROPIC_API_KEY` is set) writes a headline, summary, sections, next month's
+focus and notes for the team, using only those facts. It is told that GA4, Search Console and Google Ads results aren't
+connected, so traffic, rankings and ad performance never appear. Without Claude, the facts are written out as bullets
+for staff to finish by hand. The facts snapshot, Claude's draft and the edited version are all kept.
+
+1. Staff edit every field. Generating again replaces the draft, and asks first if someone edited it.
+2. **Share** puts it in the client's portal under **Reports** (printable, "Save as PDF") and can email their portal
+   logins a link. If email isn't set up, nothing is claimed as sent and staff get the link to pass on.
+3. A shared report can't be edited or regenerated until staff **Unshare** it, which is logged. Clients only see shared
+   reports; drafts and other businesses' reports get the same 404 as a missing one. Team notes and facts stay internal.
+
+Admins can draft last month's report for every active client from **Settings → Monthly reports**. It runs a few
+clients per request (two with Claude, ten without) to stay inside Workers limits, shows progress, skips clients that
+already have a report for that month, and never shares anything.
 
 ## Security rules the code enforces
 
