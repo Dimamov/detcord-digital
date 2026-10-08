@@ -331,11 +331,34 @@ function PaymentSettings() {
       <IntegrationCard title="Google speed test and Business Profile" item={data.google} task="Task 10" path="google"
         about="Website checks use Google PageSpeed and Google Places. Without a key, the speed test runs only when Google's shared limit allows, and the Google profile check is skipped."
         okText={() => 'PageSpeed and Places both answered.'} testNote="Runs one speed test and one Places search." />
+      <GoatIntegrations />
       <section class="card">
         <div class="row between"><h2 style="margin:0">Email</h2><span class={`badge ${data.email.configured ? 'good' : 'bad'}`}>{data.email.configured ? 'Set up' : 'Not set up'}</span></div>
         <p class="muted" style="margin-bottom:0">{data.email.configured ? 'Invites, receipts and agreement notices are emailed from info@detcorddigital.com.' : 'Without email, invite links are shown to you to share by hand, and receipts are not sent. Bob sets this up in Task 2.'}</p>
       </section>
     </div>
+  );
+}
+
+// GOAT Command: Claude drafts plans; requests arrive by email and text.
+function GoatIntegrations() {
+  const { data } = useLoad('/settings/integrations/goat');
+  if (!data) return null;
+  const claude = { ...data.claude, missing: data.claude.configured ? [] : ['ANTHROPIC_API_KEY'] };
+  const inbound = (x) => STATE[x.state] || STATE.untested;
+  return (
+    <>
+      <IntegrationCard title="Claude (GOAT plans)" item={claude} task="Task 6" path="claude"
+        about="Drafts a plan for each GOAT request so the client can approve it. Without it, your team writes every plan by hand."
+        okText={(t) => `Sample plan: “${t.sample}”`} testNote="Drafts one sample plan. Nothing is sent to anyone." />
+      <section class="card">
+        <h2>GOAT requests by email and text</h2>
+        <dl class="kv">
+          <dt>Email</dt><dd><span class={`badge ${inbound(data.email)[1]}`}>{data.email.state === 'connected' ? 'Receiving' : 'Nothing received yet'}</span>{data.email.lastReceived && <div class="small muted">Last email {dateTime(data.email.lastReceived.at)}</div>}<div class="small muted">Bob routes goat@ to the portal in Task 7. It shows as receiving after the first real email arrives.</div></dd>
+          <dt>Text</dt><dd><span class={`badge ${inbound(data.sms)[1]}`}>{data.sms.state === 'connected' ? 'Receiving' : data.sms.state === 'not_configured' ? 'Not set up' : 'Nothing received yet'}</span>{data.sms.lastReceived && <div class="small muted">Last text {dateTime(data.sms.lastReceived.at)}</div>}<div class="small muted">Needs TWILIO_AUTH_TOKEN and this incoming-message webhook on the Twilio number: <span style="font-family:monospace">{data.sms.webhook}</span></div></dd>
+        </dl>
+      </section>
+    </>
   );
 }
 

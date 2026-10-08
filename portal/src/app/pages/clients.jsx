@@ -8,6 +8,7 @@ import { ContractsTab } from './contracts.jsx';
 import { BillingTab } from './billing.jsx';
 import { FilesPanel } from './files.jsx';
 import { AuditsTab } from './audits.jsx';
+import { GoatTab } from './goat.jsx';
 
 export function IndustrySelect({ value, onChange, required }) {
   return (
@@ -150,7 +151,7 @@ export function NewClient({ user }) {
 }
 
 // ---------- Client record ----------
-const TABS = [['overview', 'Overview'], ['audits', 'Website check'], ['discovery', 'Discovery'], ['deals', 'Deals'], ['contracts', 'Agreements'], ['billing', 'Billing'], ['files', 'Files'], ['tasks', 'Tasks'], ['notes', 'Notes'], ['access', 'Portal access']];
+const TABS = [['overview', 'Overview'], ['goat', 'Requests'], ['audits', 'Website check'], ['discovery', 'Discovery'], ['deals', 'Deals'], ['contracts', 'Agreements'], ['billing', 'Billing'], ['files', 'Files'], ['tasks', 'Tasks'], ['notes', 'Notes'], ['access', 'Portal access']];
 
 export function ClientRecord({ id, user }) {
   if (user.role === 'client') return <ClientOwnRecord id={id} />;
@@ -194,6 +195,7 @@ function StaffClientRecord({ id, user }) {
       {tab === 'contracts' && <ContractsTab clientId={c.id} user={user} />}
       {tab === 'billing' && <BillingTab clientId={c.id} user={user} />}
       {tab === 'files' && <FilesPanel clientId={c.id} user={user} />}
+      {tab === 'goat' && <GoatTab client={c} user={user} />}
       {tab === 'audits' && <AuditsTab client={c} user={user} onChanged={reload} />}
     </div>
   );

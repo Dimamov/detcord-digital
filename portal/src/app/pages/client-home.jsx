@@ -2,10 +2,10 @@ import { useLoad, date, money } from '../lib.js';
 import { Loading, ErrorBox, Empty, Avatar, Icon } from '../ui.jsx';
 import { session } from '../lib.js';
 import { ReportsCard } from './audits.jsx';
+import { GoatCard } from './goat.jsx';
 
 // The client workspace: what needs them (agreements to sign, invoices due), updates, services,
-// files and their Detcord team. GOAT Command and reports arrive in later phases and are
-// shown as "coming soon" rather than as working buttons.
+// GOAT requests, reports, files and their Detcord team.
 export function ClientHome({ user }) {
   const businesses = session.value?.clients || [];
   if (!businesses.length) {
@@ -32,15 +32,7 @@ function BusinessView({ id, user, others }) {
       <ActionItems />
       <ReportsCard />
 
-      <section class="card mb" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
-        <img src="/goat-96.webp" alt="" style="width:64px;height:64px;border-radius:50%" />
-        <div style="flex:1;min-width:220px">
-          <h2 style="margin:0 0 4px">ASK THE GOAT</h2>
-          <p class="muted" style="margin:0">Soon you’ll be able to ask for website changes, social posts and updates here, by text or by email. You review, you approve, it’s done.</p>
-        </div>
-        <span class="badge">Coming soon</span>
-      </section>
-
+      <GoatCard clientId={client.id} user={user} />
 
       <div class="grid main-side">
         <div class="stack">

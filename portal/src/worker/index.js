@@ -12,6 +12,8 @@ import billing from './routes/billing.js';
 import media from './routes/media.js';
 import audits from './routes/audits.js';
 import emailDelivery from './routes/email-delivery.js';
+import goat from './routes/goat.js';
+import inbound, { handleEmail } from './routes/inbound.js';
 
 const app = new Hono();
 
@@ -33,6 +35,7 @@ app.use('/api/*', async (c, next) => {
 app.use('/api/*', loadUser);
 
 app.route('/api', emailDelivery);
+app.route('/api', inbound);
 app.route('/api/auth', auth);
 app.route('/api/users', users);
 app.route('/api/clients', clients);
@@ -43,6 +46,7 @@ app.route('/api', contracts);
 app.route('/api', billing);
 app.route('/api', media);
 app.route('/api', audits);
+app.route('/api', goat);
 
 app.all('/api/*', (c) => c.json({ error: 'Not found.' }, 404));
 
@@ -63,5 +67,9 @@ export default {
     out.headers.set('Strict-Transport-Security', 'max-age=31536000');
     out.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
     return out;
+  },
+  // GOAT requests sent by email, routed here by Cloudflare Email Routing.
+  async email(message, env, ctx) {
+    await handleEmail(message, env, ctx);
   },
 };

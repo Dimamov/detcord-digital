@@ -40,7 +40,7 @@ the endpoint refuses to run again. After that, every other user is invited from 
 | staging | `detcord-portal-staging` | `detcord-portal-staging` | workers.dev |
 | production | `detcord-portal` | `detcord-portal` | portal.detcorddigital.com |
 
-The GitHub Action `.github/workflows/portal-staging.yml` tests every change. On pushes to `portal-v2`, it also
+The GitHub Action `.github/workflows/portal-staging.yml` tests every change. On pushes to any branch other than `main`, it also
 deploys staging and applies migrations. It skips the deploy until the `CLOUDFLARE_API_TOKEN` and
 `CLOUDFLARE_ACCOUNT_ID` repository secrets exist. Wrangler creates the D1 database on the first deploy.
 
@@ -56,7 +56,9 @@ secrets are set separately on the `detcord-portal` Worker; it never shares stagi
 | `RESEND_API_KEY` | invite, reset, agreement, invoice and receipt emails | admins get a link to share by hand; no receipts |
 | `CLOVER_MERCHANT_ID`, `CLOVER_PRIVATE_TOKEN`, `CLOVER_WEBHOOK_SECRET` | online invoice payments (Clover Hosted Checkout) | invoices show "online payment not set up"; admins can record manual payments |
 | `GOOGLE_API_KEY` | website checks: Google PageSpeed and the Google Business Profile lookup (Places API (New)) | the speed test runs only within Google's shared quota; the Google profile check is skipped and the report says so |
-| `TWILIO_ACCOUNT_SID`, `TWILIO_API_KEY_SID`, `TWILIO_API_KEY_SECRET`, `TWILIO_MESSAGING_SERVICE_SID` | texting website check reports | Text says texting isn't set up; staff get the portal link to pass on |
+| `TWILIO_ACCOUNT_SID`, `TWILIO_API_KEY_SID`, `TWILIO_API_KEY_SECRET`, `TWILIO_MESSAGING_SERVICE_SID` | texting website check reports and GOAT replies | Text says texting isn't set up; staff get the portal link to pass on |
+| `TWILIO_AUTH_TOKEN` | verifying incoming GOAT texts (Twilio signs webhooks with the auth token) | the text webhook answers 503 and no texts are accepted |
+| `ANTHROPIC_API_KEY` | Claude drafts a plan for each GOAT request | staff write every plan by hand |
 
 Add them in Cloudflare under **Workers & Pages → (worker) → Settings → Variables and Secrets** (type Secret).
 `CLOVER_API_BASE` is a plain var: sandbox on staging, `https://api.clover.com` in production. Clover's webhook
@@ -80,6 +82,25 @@ report; after that, a sign-in link to `/reports/<id>`. Customers only see checks
 confirming the customer agreed to it. If email or texting isn't connected, nothing is claimed as sent and staff get the
 link to pass on. The check stays within the free plan's 50 subrequests per request. For local testing against a site on your machine, run
 `npx wrangler dev --env staging --var AUDIT_ALLOW_PRIVATE:1 --var AUDIT_SKIP_GOOGLE:1`; production refuses private addresses.
+
+## GOAT Command
+
+Clients ask for work in the portal (**Ask the GOAT**), by email to the GOAT address, or by text. All three become the
+same request: original message, attachments, sender, channel and times are kept.
+
+1. Claude drafts a plan (when `ANTHROPIC_API_KEY` is set), or staff write one. The client sees exactly what will be done.
+2. The client approves that plan in the portal, or replies YES by text when exactly one plan is waiting. Approval is bound
+   to a hash of the plan; if staff change it afterwards, it goes back to the client for approval.
+3. The Detcord team does the work and marks it done with a note, link or screenshots, or explains why it can't be done.
+   Nothing is applied to a client's website, Google profile or social accounts automatically yet, and the UI says so.
+
+Senders are matched only to client portal logins and client contacts. Unknown numbers are asked once for their name and
+business; the answer is stored as a claim, and an admin confirms the sender (which saves them as a contact) before
+anything happens. Emails that fail DMARC are held the same way. Twilio retries and repeated emails are deduplicated by
+message ID.
+
+Setup: texts need the Twilio number's incoming-message webhook set to `https://<portal>/api/webhooks/twilio`. Email needs
+a Cloudflare Email Routing rule that sends the GOAT address to this Worker (`Send to a Worker` → `detcord-portal`).
 
 ## Security rules the code enforces
 
