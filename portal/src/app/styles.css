@@ -356,3 +356,28 @@ tr.me td { background: var(--accent-soft); }
 .board-empty { padding: 18px; text-align: center; color: var(--faint, var(--muted)); font-size: 13px; }
 .board-hidden { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; padding: 10px 12px; }
 .board-card .card.mb { margin-bottom: 0; }
+
+/* Email delivery: a one-line box at the bottom of the dashboard that opens into the list */
+.email-mini { margin-top: 18px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); font-size: 13px; }
+.email-mini summary { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 12px; cursor: pointer; color: var(--muted); list-style: none; }
+.email-mini summary::-webkit-details-marker { display: none; }
+.email-mini[open] summary { border-bottom: 1px solid var(--line); }
+.email-mini .list { padding: 4px 12px 8px; }
+
+/* Phones: a little bigger and bolder text throughout */
+@media (max-width: 860px) {
+  html, body { font-size: 16.5px; font-weight: 500; }
+  .small, .list-item .meta, .stat .label, .field > span, .sub { font-size: 14.5px; }
+  .stat .hint, .field .help, .badge { font-size: 13px; }
+  .badge, .tabs button, .nav a { font-weight: 600; }
+  .kv, table, .alert, .chip, .toast, .script, .passed li, .audit-progress li { font-size: 15.5px; }
+  th { font-size: 13px; }
+  .card h2, .card h3 { font-size: 17.5px; }
+  .question .qtext { font-size: 17.5px; }
+  .question .hint { font-size: 14.5px; }
+  .btn { font-size: 15.5px; }
+  .btn.sm { font-size: 14px; }
+  .input, input, select, textarea { font-size: 16px; }
+  .bottom-nav a { font-size: 12px; font-weight: 600; }
+  .email-mini { font-size: 14px; }
+}
