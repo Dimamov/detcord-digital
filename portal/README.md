@@ -165,6 +165,18 @@ Admins can draft last month's report for every active client from **Settings →
 clients per request (two with Claude, ten without) to stay inside Workers limits, shows progress, skips clients that
 already have a report for that month, and never shares anything.
 
+## Agreements
+
+A new agreement starts from the client's selected services (the default), from an agreement template, or blank.
+Admins manage templates in **Settings → Agreement templates** (services, prices, scope, deposit and payment terms)
+or with **Save as template** on a draft; templates never hold a client's parties or files, and archived ones can't
+start new agreements. Staff can **Duplicate** any agreement into a new draft with a new number (signatures, frozen
+documents and hashes are never copied). A client can **Ask for changes** on an agreement waiting for their signature:
+the note is logged, shown to staff on the agreement, and emailed to the client's reps and admins when email is set
+up. The sent document never changes; staff use **Void and redraft**, which voids it with "Changes requested" and
+opens an editable copy. Reps can do that for sent agreements; voiding a signed one stays admin-only. The editor lists
+everything that blocks sending, each linked to the field (or to Settings → Company) that fixes it.
+
 ## Security rules the code enforces
 
 - Every API route checks the role and the client scope on the server. A rep sees only assigned clients,
