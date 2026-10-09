@@ -8,7 +8,7 @@ import { createInvoice } from '../lib/invoices.js';
 import { sendEmail, renderEmail } from '../lib/email.js';
 import {
   renderContract, signingProblems, contractTotals, needsReview, signingStatementFor, termsVersionOf,
-  TERMS_V1, TERMS_DRAFT, TERM_MONTHS, MAX_TERM_DISCOUNT, EARLY_TERMINATION, DEFAULT_EARLY_TERMINATION,
+  TERMS_V1, TERMS_2026_10, TERMS_FOR_NEW, TERM_MONTHS, MAX_TERM_DISCOUNT, EARLY_TERMINATION, DEFAULT_EARLY_TERMINATION,
 } from '../../shared/contract.js';
 
 const r = new Hono();
@@ -26,13 +26,10 @@ async function templateTerms(db, data) {
   return { ...terms, services: terms.services.filter((s) => known.has(s.serviceId)).map((s) => ({ ...s, name: known.get(s.serviceId) })) };
 }
 
-// Admin choices for agreement terms. The 2026-10 draft terms stay off until an admin switches them on.
+// Admin choice for fixed terms: what ending one early costs (default 50% of the remaining monthly fees).
 async function contractSettings(db) {
   const s = await getSettings(db, 'contracts.');
-  return {
-    termsForNew: s.termsForNew === TERMS_DRAFT ? TERMS_DRAFT : TERMS_V1,
-    earlyTermination: EARLY_TERMINATION[s.earlyTermination] ? s.earlyTermination : DEFAULT_EARLY_TERMINATION,
-  };
+  return { termsForNew: TERMS_FOR_NEW, earlyTermination: EARLY_TERMINATION[s.earlyTermination] ? s.earlyTermination : DEFAULT_EARLY_TERMINATION };
 }
 
 // Drafts follow the current company details and terms settings; sending freezes them into the agreement.
@@ -42,10 +39,6 @@ const withLiveDetails = (data, company, settings) => ({
   providerEmail: company.email || data.providerEmail || 'info@detcorddigital.com',
   venueCounty: company.venueCounty || data.venueCounty || '', earlyTermination: settings.earlyTermination,
 });
-
-// Sending on the draft terms is allowed only while an admin has them switched on.
-const TERMS_OFF = 'Terms version: the 2026-10 draft terms are turned off';
-const termsProblems = (data, settings) => (termsVersionOf(data) === TERMS_DRAFT && settings.termsForNew !== TERMS_DRAFT ? [TERMS_OFF] : []);
 
 async function loadContract(c, id, { write = false } = {}) {
   const row = await c.env.DB.prepare('SELECT * FROM contracts WHERE id=?').bind(id).first();
@@ -62,9 +55,10 @@ function publicView(contract, user, company = {}, settings = null) {
   if (isStaff(user)) {
     // Drafts pick up the current company details and terms settings when sent, so check against those.
     const live = contract.status === 'draft' ? withLiveDetails(contract.data, company, settings) : contract.data;
-    out.problems = [...signingProblems(live), ...(contract.status === 'draft' ? termsProblems(live, settings) : [])];
+    out.problems = signingProblems(live);
     out.termsSettings = settings;
-    out.reviewServices = contract.data.services.filter((s) => needsReview(s.serviceId)).map((s) => s.name);
+    // Newer catalog wording was reviewed with version 2026-10; version 1 agreements flag it.
+    out.reviewServices = termsVersionOf(contract.data) === TERMS_V1 ? contract.data.services.filter((s) => needsReview(s.serviceId)).map((s) => s.name) : [];
   } else {
     delete out.created_by; delete out.void_reason; delete out.template_id; delete out.copied_from;
   }
@@ -113,9 +107,9 @@ async function partiesFor(db, client, user) {
   };
 }
 
-// New agreements, copies included, use the terms version an admin chose for new agreements.
+// New agreements, copies included, use the current terms version.
 async function insertDraft(db, { user, client, data, title, templateId = null, copiedFrom = null }) {
-  data = { termMonths: 0, termDiscountPct: 0, ...data, termsVersion: (await contractSettings(db)).termsForNew };
+  data = { termMonths: 0, termDiscountPct: 0, ...data, termsVersion: TERMS_FOR_NEW };
   const deal = await db.prepare("SELECT d.id FROM deals d JOIN pipeline_stages ps ON ps.id=d.stage_id WHERE d.client_id=? AND ps.outcome='open' ORDER BY d.updated_at DESC LIMIT 1").bind(client.id).first();
   const id = newId();
   const t = now();
@@ -244,12 +238,8 @@ async function cleanData(db, clientId, prev, body) {
     if (!Number.isFinite(pct) || pct < 0 || pct > MAX_TERM_DISCOUNT) fail(400, `Term discount must be between 0 and ${MAX_TERM_DISCOUNT}%.`);
     d.termDiscountPct = Math.round(pct * 100) / 100;
   }
-  // Staff may move a draft back to version 1 at any time, onto the draft terms only while an admin allows them.
-  if (body.termsVersion !== undefined) {
-    const v = oneOf(String(body.termsVersion), [TERMS_V1, TERMS_DRAFT], 'Terms version');
-    if (v === TERMS_DRAFT && v !== prev.termsVersion && (await contractSettings(db)).termsForNew !== TERMS_DRAFT) fail(400, 'The 2026-10 draft terms are turned off in Settings.');
-    d.termsVersion = v;
-  }
+  // A draft keeps the version it was created with until staff move it in the editor.
+  if (body.termsVersion !== undefined) d.termsVersion = oneOf(String(body.termsVersion), [TERMS_V1, TERMS_2026_10], 'Terms version');
   if (body.paymentDays !== undefined) d.paymentDays = intIn(body.paymentDays, 0, 90, 15);
   if (body.feedbackDays !== undefined) d.feedbackDays = intIn(body.feedbackDays, 1, 30, 10);
   if (body.services !== undefined) {
@@ -371,7 +361,7 @@ r.post('/contracts/:id/template', async (c) => {
   return c.json({ id }, 201);
 });
 
-// ---- terms settings (admin) ---------------------------------------------------
+// ---- early termination setting (admin) ----------------------------------------
 
 r.get('/settings/contracts', async (c) => {
   requireRole(c, 'admin', 'rep');
@@ -383,10 +373,8 @@ r.put('/settings/contracts', async (c) => {
   const db = c.env.DB;
   const body = await readJson(c);
   const before = await contractSettings(db);
-  if (body.termsForNew !== undefined) await putSetting(db, 'contracts.termsForNew', oneOf(String(body.termsForNew), [TERMS_V1, TERMS_DRAFT], 'Terms version'), user.id);
   if (body.earlyTermination !== undefined) await putSetting(db, 'contracts.earlyTermination', oneOf(body.earlyTermination, Object.keys(EARLY_TERMINATION), 'Early termination rule'), user.id);
   const after = await contractSettings(db);
-  if (after.termsForNew !== before.termsForNew) await logActivity(db, { actorId: user.id, kind: 'contract', summary: `New agreements now use ${after.termsForNew === TERMS_DRAFT ? 'the 2026-10 draft terms' : 'version 1 terms'}` });
   if (after.earlyTermination !== before.earlyTermination) await logActivity(db, { actorId: user.id, kind: 'contract', summary: `Early termination rule for fixed terms: ${EARLY_TERMINATION[after.earlyTermination].label}` });
   return c.json(after);
 });
@@ -433,7 +421,7 @@ r.post('/contracts/:id/send', async (c) => {
   // Freeze current company details and the early termination rule into the document.
   const settings = await contractSettings(db);
   const data = withLiveDetails(contract.data, await getSettings(db, 'company.'), settings);
-  const problems = [...signingProblems(data), ...termsProblems(data, settings)];
+  const problems = signingProblems(data);
   if (problems.length) return c.json({ error: 'Finish these before sending.', problems }, 400);
   const t = now();
   const sent = { ...contract, data, status: 'sent', issued_at: t };

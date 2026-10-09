@@ -3,7 +3,7 @@ import { useLoad, api, toast, money, dollars, date, dateTime, navigate } from '.
 import { Loading, ErrorBox, Empty, Icon, Field, Dialog, useAction } from '../ui.jsx';
 import { FilePicker } from './files.jsx';
 import {
-  contractTotals, signingStatementFor, termsVersionOf, TERMS_V1, TERMS_DRAFT, TERMS_VERSIONS, TERM_MONTHS, EARLY_TERMINATION, DEFAULT_EARLY_TERMINATION,
+  contractTotals, signingStatementFor, termsVersionOf, TERMS_V1, TERMS_2026_10, TERMS_VERSIONS, TERM_MONTHS, EARLY_TERMINATION, DEFAULT_EARLY_TERMINATION,
 } from '../../shared/contract.js';
 
 const STATUS = { draft: ['Draft', ''], sent: ['Awaiting signature', 'warn'], signed: ['Signed', 'good'], void: ['Voided', 'bad'] };
@@ -94,7 +94,6 @@ async function duplicateContract(contract) {
 }
 
 const termLabel = (m) => (Number(m) ? `${m} months` : 'Month to month');
-const DRAFT_TERMS_WARNING = 'This agreement uses the 2026-10 draft terms. A Michigan attorney has not approved them yet. Only Detcord staff see this note.';
 
 // Totals rows shared by the editor and the sent view. Fixed terms show the discount and the value for the term.
 function TotalsList({ totals }) {
@@ -155,7 +154,6 @@ const PROBLEM_FIELDS = {
   'Deposit is larger than the first invoice total': 'f-deposit',
   'Term: month to month, or 3, 6, 9 or 12 months': 'f-termMonths', 'A fixed term needs at least one monthly fee': 'f-termMonths',
   'A term discount needs a fixed term': 'f-termDiscountPct', 'Term discount between 0 and 50%': 'f-termDiscountPct',
-  'Terms version: the 2026-10 draft terms are turned off': 'f-termsVersion',
 };
 function problemTarget(p, services) {
   if (p.includes('(Settings → Company)')) return { href: '/settings?tab=company' };
@@ -221,14 +219,10 @@ function ContractEditor({ data, user, reload }) {
   const setService = (i, patch) => update({ services: form.services.map((s, k) => (k === i ? { ...s, ...patch } : s)) });
   const totals = contractTotals({ services: form.services.map((s) => ({ setupCents: centsOf(s.setup), monthlyCents: centsOf(s.monthly) })), depositCents: centsOf(form.deposit), termMonths: form.termMonths, termDiscountPct: form.termDiscountPct });
   const settings = saved.termsSettings || {};
-  const draftTerms = form.termsVersion === TERMS_DRAFT;
+  const revisedTerms = form.termsVersion === TERMS_2026_10;
   const available = (catalog.data?.services || []).filter((s) => s.active && !form.services.some((x) => x.serviceId === s.id));
 
-  const doSend = () => {
-    if (draftTerms && !confirm('This agreement uses the 2026-10 draft terms, which a Michigan attorney has not approved yet. Send it for signature anyway?')) return;
-    sendNow();
-  };
-  const sendNow = () => send.run(async () => {
+  const doSend = () => send.run(async () => {
     clearTimeout(timer.current);
     await save(form);
     try {
@@ -278,7 +272,7 @@ function ContractEditor({ data, user, reload }) {
             {form.services.map((s, i) => (
               <div class="svc-row">
                 <div class="row between"><strong>{s.name}</strong><button class="icon-btn" onClick={() => update({ services: form.services.filter((_, k) => k !== i) })} aria-label={`Remove ${s.name}`}><Icon name="trash" size={16} /></button></div>
-                {saved.reviewServices?.includes(s.name) && <div class="small" style="color:var(--warn)">New service wording: have it reviewed by counsel before relying on it.</div>}
+                {saved.reviewServices?.includes(s.name) && <div class="small" style="color:var(--warn)">Newer service wording, reviewed with version 2026-10 terms. Move this draft to 2026-10 under Term.</div>}
                 <div class="form-grid mt" style="margin-top:8px">
                   <Field label="One-time ($)"><input id={`f-svc-${s.serviceId}-setup`} class="input" inputMode="decimal" value={s.setup} onInput={(e) => setService(i, { setup: e.target.value })} placeholder="0" /></Field>
                   <Field label="Monthly ($)"><input id={`f-svc-${s.serviceId}-monthly`} class="input" inputMode="decimal" value={s.monthly} onInput={(e) => setService(i, { monthly: e.target.value })} placeholder="0" /></Field>
@@ -311,13 +305,12 @@ function ContractEditor({ data, user, reload }) {
               <Field label="Term discount (%)" help="optional, off monthly fees"><input id="f-termDiscountPct" class="input" inputMode="decimal" value={form.termDiscountPct} onInput={(e) => update({ termDiscountPct: e.target.value })} placeholder="0" /></Field>
               <div class="full small muted">
                 {!Number(form.termMonths) ? 'Either party can cancel a monthly service with 30 days’ notice.'
-                  : draftTerms ? `After ${form.termMonths} months: month to month with 30 days’ notice. Early termination: ${EARLY_TERMINATION[settings.earlyTermination || DEFAULT_EARLY_TERMINATION].label.toLowerCase()} (an admin sets this in Settings → Agreement templates).`
-                    : `Version 1 terms: the term is added to Additional scope as a change to “Term and cancellation”, with no early termination fee. After ${form.termMonths} months: month to month with 30 days’ notice.`}
+                  : revisedTerms ? `After ${form.termMonths} months: month to month with 30 days’ notice. Early termination: ${EARLY_TERMINATION[settings.earlyTermination || DEFAULT_EARLY_TERMINATION].label.toLowerCase()} (an admin sets this in Settings → Agreement templates).`
+                    : `Version 1 terms: the term is added to Additional scope as a change to “Term and cancellation”, with no early termination fee. After ${form.termMonths} months: month to month with 30 days’ notice. Move this draft to version 2026-10 to use the early termination rule.`}
               </div>
-              <Field label="Terms version">
+              <Field label="Terms version" help="new agreements use 2026-10">
                 <select id="f-termsVersion" class="select" value={form.termsVersion} onChange={(e) => update({ termsVersion: e.target.value })}>
-                  <option value={TERMS_V1}>{TERMS_VERSIONS[TERMS_V1]}</option>
-                  {(draftTerms || settings.termsForNew === TERMS_DRAFT) && <option value={TERMS_DRAFT}>{TERMS_VERSIONS[TERMS_DRAFT]} (needs attorney approval)</option>}
+                  {[TERMS_2026_10, TERMS_V1].map((v) => <option value={v}>{TERMS_VERSIONS[v]}</option>)}
                 </select>
               </Field>
             </div>
@@ -350,9 +343,8 @@ function ContractEditor({ data, user, reload }) {
             {blocking?.length ? <ProblemList problems={blocking} services={form.services} user={user} />
               : <p class="small muted" style="margin:0">Sending signs for Detcord, freezes this version and emails the client a link to review and sign.</p>}
           </section>
-          {saved.reviewServices?.length > 0 && <div class="alert warn small">Legal review: the wording for {saved.reviewServices.join(', ')} is new and has not been reviewed by counsel yet.</div>}
-          {draftTerms ? <div class="alert warn small">{DRAFT_TERMS_WARNING}</div>
-            : <div class="alert info small">The general terms are Detcord’s existing Michigan agreement language. Generated agreements are not a substitute for legal advice.</div>}
+          {saved.reviewServices?.length > 0 && <div class="alert warn small">The wording for {saved.reviewServices.join(', ')} was reviewed with version 2026-10 terms, not version 1. Move this draft to 2026-10 under Term.</div>}
+          <div class="alert info small">{revisedTerms ? 'General terms: version 2026-10, Detcord’s current Michigan agreement language.' : 'General terms: version 1, the original agreement language. Move this draft to version 2026-10 under Term.'}</div>
           <CopiedFrom copiedFrom={data.copiedFrom} />
           <div class="row" style="gap:6px">
             <button class="btn ghost sm" onClick={copy} disabled={send.busy}><Icon name="copy" />Duplicate</button>
@@ -406,7 +398,6 @@ function StaffContractView({ data, user, reload }) {
         {user.role === 'admin' && contract.status !== 'void' && <button class="btn ghost" onClick={voidIt} disabled={act.busy}>Void</button>}
       </Head>
       {act.error && <div class="alert bad mb">{act.error}</div>}
-      {termsVersionOf(contract.data) === TERMS_DRAFT && <div class="alert warn mb">{DRAFT_TERMS_WARNING}</div>}
       {open.length > 0 && <div class="alert bad mb"><strong>{client.name} asked for changes.</strong> The sent version can’t change. Use <strong>Void and redraft</strong> to make an editable copy, then send it again.</div>}
       <div class="grid main-side">
         <DocFrame id={contract.id} version={contract.version} tall />
@@ -538,29 +529,18 @@ function toTemplateForm(t) {
 }
 const BLANK_TEMPLATE = { services: [], depositCents: null, paymentDays: 15, feedbackDays: 10, paymentTerms: '', thirdParty: '', additional: '', termMonths: 0, termDiscountPct: 0 };
 
-// Which terms new agreements use, and the early termination rule for fixed terms (2026-10 draft terms only).
+// The early termination rule for fixed terms (version 2026-10 terms).
 function AgreementTermsSettings() {
   const { loading, data, error, reload } = useLoad('/settings/contracts');
   const act = useAction();
   if (loading) return <Loading />;
   if (error) return <ErrorBox error={error} retry={reload} />;
   const put = (patch, message) => act.run(async () => { await api('PUT', '/settings/contracts', patch); toast(message); reload(); });
-  const chooseTerms = (e) => {
-    const v = e.target.value;
-    if (v === TERMS_DRAFT && !confirm('Use the 2026-10 draft terms for new agreements? They have not been approved by a Michigan attorney yet.')) { e.target.value = data.termsForNew; return; }
-    put({ termsForNew: v }, v === TERMS_DRAFT ? 'New agreements now use the 2026-10 draft terms.' : 'New agreements now use version 1 terms.');
-  };
   return (
     <section class="card stack">
       <h2 style="margin:0">Agreement terms</h2>
-      <Field label="Terms used for new agreements">
-        <select class="select" value={data.termsForNew} onChange={chooseTerms} disabled={act.busy}>
-          <option value={TERMS_V1}>{TERMS_VERSIONS[TERMS_V1]}, default</option>
-          <option value={TERMS_DRAFT}>{TERMS_VERSIONS[TERMS_DRAFT]} (needs attorney approval)</option>
-        </select>
-      </Field>
-      <div class="alert warn small">The 2026-10 draft terms were written for review by a Michigan attorney and have not been approved. Keep version 1 until the attorney signs off. Changing this affects new agreements only: drafts keep their terms, and sent or signed agreements never change.</div>
-      <Field label="Early termination of fixed terms" help="2026-10 draft terms only">
+      <p class="small muted" style="margin:0">New agreements use {TERMS_VERSIONS[TERMS_2026_10].toLowerCase()}. Drafts, sent and signed agreements keep the version they were created with; a draft can be moved to 2026-10 in the editor.</p>
+      <Field label="Early termination of fixed terms" help="version 2026-10 terms">
         <select class="select" value={data.earlyTermination} onChange={(e) => put({ earlyTermination: e.target.value }, 'Early termination rule saved.')} disabled={act.busy}>
           {Object.entries(EARLY_TERMINATION).map(([k, rule]) => <option value={k}>{rule.label}{k === DEFAULT_EARLY_TERMINATION ? ' (default)' : ''}</option>)}
         </select>
@@ -584,7 +564,7 @@ export function TemplateSettings() {
   return (
     <div class="stack">
       <AgreementTermsSettings />
-      <div class="alert info">Templates hold services, prices, scope, payment terms and the contract term. Starting an agreement from one copies those terms; the client’s legal name, address and email always come from the client record. The general terms follow the version chosen above.</div>
+      <div class="alert info">Templates hold services, prices, scope, payment terms and the contract term. Starting an agreement from one copies those terms; the client’s legal name, address and email always come from the client record. New agreements use the current general terms (version 2026-10).</div>
       <section class="card">
         {data.templates.length ? data.templates.map((t) => (
           <div class="row" style="padding:10px 0;border-bottom:1px solid var(--line)">

@@ -1,11 +1,12 @@
 // Detcord service agreement: approved clause language and the document renderer.
 // Language comes from the live portal's contract-template.js (Michigan law). Service terms
-// marked `review: true` are new for services added to the catalog on 2026-10-08 and need
-// legal review before they are relied on; the editor flags them to staff.
+// in REVIEW_TERMS are for services added to the catalog on 2026-10-08; they were reviewed with the
+// 2026-10 terms, and the editor flags them to staff on version 1 agreements.
 //
 // Terms versions: every agreement stores `termsVersion` in its data. Version 1 (also when the field is
-// missing) is the language every agreement sent so far references, so its text below must never change.
-// '2026-10' is a revision drafted for Michigan attorney review; admins opt in under Settings.
+// missing) is the language every agreement sent before 2026-10 references, so its text below must never change.
+// '2026-10' is the revision researched against Michigan and federal law (agreement-review-michigan.md in the
+// project files) and the version every new agreement uses. A draft can be moved between versions in the editor.
 
 export const SERVICE_TERMS = {
   seo: 'Technical audit, agreed fixes, keyword mapping, on-page work and useful content for the pages and quantities specified below. Rankings, indexing and lead volumes are not guaranteed.',
@@ -33,7 +34,7 @@ export const SERVICE_TERMS = {
   'ai-enablement': 'Agreed tools, workflows, training sessions, staff guides and support coverage. People remain responsible for checking AI output. Approved vendors, data handling, human escalation and usage costs are documented. Call recording, voice transcription and regulated decisions are excluded unless separately scoped and legally reviewed.',
 };
 
-// New wording for catalog additions without approved language. Flagged for legal review.
+// Wording for catalog additions after version 1. Flagged to staff on version 1 agreements.
 export const REVIEW_TERMS = {
   citations: 'Submission and cleanup of business name, address and phone details on the directories listed below. Directory acceptance, removal of third-party data and listing timing are outside Provider control. Paid directory fees are separate unless expressly included.',
   lsa: 'Setup and management of Google Local Services Ads for the service categories and areas listed below, including profile content, budget pacing and lead dispute requests. Google verification, background checks, badge approval and dispute outcomes are decided by Google. Lead charges are paid to Google and are separate unless expressly included.',
@@ -41,8 +42,8 @@ export const REVIEW_TERMS = {
   accessibility: 'Accessibility review and remediation of the pages, templates and components listed below against the agreed WCAG level. Remediation reduces barriers but is not a legal opinion or a guarantee against claims; no blanket compliance certification is promised. Content and third-party tools added later may need new review.',
 };
 
-export const termsFor = (serviceId, version = TERMS_V1) => (version === TERMS_DRAFT
-  ? DRAFT_SERVICE_TERMS[serviceId] || SERVICE_TERMS[serviceId] || DRAFT_REVIEW_TERMS[serviceId] || REVIEW_TERMS[serviceId]
+export const termsFor = (serviceId, version = TERMS_V1) => (version === TERMS_2026_10
+  ? SERVICE_TERMS_2026_10[serviceId] || SERVICE_TERMS[serviceId] || REVIEW_TERMS_2026_10[serviceId] || REVIEW_TERMS[serviceId]
   : SERVICE_TERMS[serviceId] || REVIEW_TERMS[serviceId]) || null;
 export const needsReview = (serviceId) => !SERVICE_TERMS[serviceId];
 
@@ -63,9 +64,10 @@ export const SIGNING_STATEMENT = 'I have reviewed this Agreement and its complet
 // ---- terms versions -----------------------------------------------------------
 
 export const TERMS_V1 = '1';
-export const TERMS_DRAFT = '2026-10';
-export const TERMS_VERSIONS = { [TERMS_V1]: 'Version 1 (current)', [TERMS_DRAFT]: '2026-10 draft' };
-export const termsVersionOf = (d) => (d?.termsVersion === TERMS_DRAFT ? TERMS_DRAFT : TERMS_V1);
+export const TERMS_2026_10 = '2026-10';
+export const TERMS_VERSIONS = { [TERMS_V1]: 'Version 1 (original)', [TERMS_2026_10]: 'Version 2026-10 (current)' };
+export const TERMS_FOR_NEW = TERMS_2026_10;
+export const termsVersionOf = (d) => (d?.termsVersion === TERMS_2026_10 ? TERMS_2026_10 : TERMS_V1);
 
 // Contract length for monthly services. 0 = month to month (the version 1 behavior).
 export const TERM_MONTHS = [0, 3, 6, 9, 12];
@@ -73,7 +75,7 @@ export const MAX_TERM_DISCOUNT = 50;
 const termMonthsOf = (d) => (TERM_MONTHS.includes(Number(d.termMonths)) ? Number(d.termMonths) : 0);
 
 // Early termination of a fixed term: an admin setting. The owner chose 50% of the remaining monthly fees
-// as the default (2026-10); the other options stay selectable. Wording appears only in the 2026-10 draft
+// as the default (2026-10); the other options stay selectable. Wording appears only in the 2026-10
 // terms and only for fixed terms; the setting is frozen into the agreement when sent.
 export const DEFAULT_EARLY_TERMINATION = 'half-remaining';
 export const EARLY_TERMINATION = {
@@ -110,9 +112,8 @@ export function v1TermClause(d) {
   return `Change to “Term and cancellation”: the monthly services in this agreement have a minimum term of ${termSentence(d)}. After the minimum term, monthly services continue month to month and either party may cancel a monthly service with 30 days’ written notice. This agreement does not renew into a new fixed term.`;
 }
 
-// 2026-10 draft. Written for review by a Michigan attorney; see agreement-review-michigan.md.
-// Not approved: staff see a warning whenever an agreement uses it.
-export const DRAFT_SERVICE_TERMS = {
+// Version 2026-10: the sources for each change are in agreement-review-michigan.md.
+export const SERVICE_TERMS_2026_10 = {
   ppc: 'Keyword and audience research, campaign setup, approved tracking, ad copy and static creative, testing and optimization within the approved budget, for the platforms and campaign quantities listed below. Client-owned ad accounts are preferred; Client is the advertiser of record and accepts each platform’s advertising terms. Client approves messaging, targeting and budget; budget increases require written approval. Advertising spend is separate unless expressly included and is handled under “Advertising spend and third-party platforms”. Platform approvals, sales and acquisition costs are not guaranteed.',
   web: 'Responsive website with the pages, forms, CMS, integrations, revision rounds and launch milestones listed below, plus any agreed funnel analysis and conversion tests. Domains should be registered in Client’s name. Additional pages, redesigns and new features require an approved change order. Experiments depend on sufficient traffic and reliable tracking; conversion increases are not guaranteed. Accessibility work is included only where the scope names it and is handled under “Accessibility”.',
   content: 'Articles, guides, case studies, landing pages and static assets in the quantities, formats and revision rounds listed below. AI-assisted drafts are reviewed by a person before delivery, as described under “AI tools and generated content”. Client verifies claims, permissions and testimonials before publication. Video production and animation are excluded.',
@@ -120,15 +121,15 @@ export const DRAFT_SERVICE_TERMS = {
   'email-sms': 'Approved campaigns, sequences, segmentation and templates at the volumes listed below, sent under “Email, text message and phone marketing”. Client supplies contact lists with the permissions the law requires and keeps the consent records. Opt-out and suppression controls are configured before the first send. Purchased, rented or scraped lists and unapproved outreach are excluded.',
   reputation: 'Review requests, monitoring and responses at the agreed cadence, with escalation of disputed or sensitive reviews. Neither party will write, buy or reward fake reviews or reviews conditioned on a positive rating, post undisclosed reviews by owners or staff, or selectively prevent dissatisfied customers from accessing public review opportunities. Review responses do not reveal customers’ private information.',
 };
-export const DRAFT_REVIEW_TERMS = {
+export const REVIEW_TERMS_2026_10 = {
   accessibility: 'Accessibility review and remediation of the pages, templates and components listed below against the agreed WCAG version and level, handled under “Accessibility”. Remediation reduces barriers but is not a legal opinion or a guarantee against claims; no compliance certification is promised. Content and third-party tools added later may need new review.',
 };
 
-export const DRAFT_SIGNING_STATEMENT = 'I have reviewed this Agreement, including its fee schedule, service schedule and general terms. I agree to sign it electronically, confirm that I am authorized to bind the business named as Client, and intend my typed signature to sign this exact Agreement.';
-export const signingStatementFor = (d) => (termsVersionOf(d) === TERMS_DRAFT ? DRAFT_SIGNING_STATEMENT : SIGNING_STATEMENT);
+export const SIGNING_STATEMENT_2026_10 = 'I have reviewed this Agreement, including its fee schedule, service schedule and general terms. I agree to sign it electronically, confirm that I am authorized to bind the business named as Client, and intend my typed signature to sign this exact Agreement.';
+export const signingStatementFor = (d) => (termsVersionOf(d) === TERMS_2026_10 ? SIGNING_STATEMENT_2026_10 : SIGNING_STATEMENT);
 
 // Sections whose wording depends on the agreement are functions of its data.
-export const DRAFT_GENERAL_TERMS = [
+export const GENERAL_TERMS_2026_10 = [
   ['Delivery, approvals and changes', 'Client supplies access, content and feedback within the feedback period stated in the fee schedule. Client delays and missing dependencies move delivery dates by a reasonable amount; Provider explains material schedule changes in writing. After each project milestone delivery, Client has the feedback period to approve it or identify specific material departures from the agreed scope. Silence alone does not approve a milestone, but publishing or using a deliverable in Client’s business approves it. Provider corrects in-scope departures and resubmits. Extra work requires a written change order describing deliverables, price and schedule impact. Material requiring Client approval is not published without it.'],
   ['Fees, invoices, late payment and taxes', 'Client pays agreed fees and approved third-party costs by the invoice due date stated in the fee schedule. Monthly fees are invoiced in advance unless the payment schedule says otherwise. Monthly invoicing does not authorize automatic card or bank charges; that needs a separate written authorization. If Client disputes an invoice in good faith, Client identifies the disputed amount and the reason in writing before the due date and pays the undisputed amount, and the parties work to resolve the dispute within 30 days. Undisputed amounts not paid within 15 days after the due date accrue simple interest at 7% per year, or the highest rate the law allows if that is lower, from the due date until paid. No other late fee applies. Provider may suspend affected services after written notice and 10 days to cure nonpayment, without blocking access to Client-owned accounts or data, and states the consequences of the pause before it starts. Fees do not include sales, use or similar taxes. If any part of the work is taxable, for example prewritten software or licenses resold to Client, Provider lists the tax separately on the invoice and Client pays it. Each party pays its own income and payroll taxes.'],
   ['Advertising spend and third-party platforms', 'Advertising spend, software, API, messaging, call tracking, app-store, domain and licensed-asset charges are separate from Provider’s fees unless the fee schedule expressly includes them. Where possible, ad spend is charged by the platform directly to Client’s payment method in a Client-owned account. Provider pays third-party costs for Client only with written approval and is reimbursed at cost unless a markup is stated. Provider does not exceed an approved budget without Client’s written approval; normal platform pacing can cause small daily variations, and Provider corrects material overspend promptly. Client is the advertiser of record and accepts each platform’s terms and policies. Platforms decide ad approvals, account suspensions, pricing, reporting and policy changes; Provider is not responsible for those decisions but helps Client respond to them. Credits and refunds that platforms issue for ad spend belong to Client.'],
@@ -154,8 +155,8 @@ export const DRAFT_GENERAL_TERMS = [
 
 // General terms as printed for an agreement: [heading, text] pairs.
 export function generalTermsFor(d) {
-  if (termsVersionOf(d) !== TERMS_DRAFT) return GENERAL_TERMS;
-  return DRAFT_GENERAL_TERMS.map(([h, p]) => [h, typeof p === 'function' ? p(d) : p]);
+  if (termsVersionOf(d) !== TERMS_2026_10) return GENERAL_TERMS;
+  return GENERAL_TERMS_2026_10.map(([h, p]) => [h, typeof p === 'function' ? p(d) : p]);
 }
 
 // Monthly figures: `monthly` is the sum of listed monthly prices; the term discount applies only to fixed terms.
@@ -198,7 +199,7 @@ export function signingProblems(d) {
   if (months && !t.monthly) p.push('A fixed term needs at least one monthly fee');
   if (!(pct >= 0 && pct <= MAX_TERM_DISCOUNT)) p.push(`Term discount between 0 and ${MAX_TERM_DISCOUNT}%`);
   else if (pct > 0 && !months) p.push('A term discount needs a fixed term');
-  if (termsVersionOf(d) === TERMS_DRAFT && !String(d.venueCounty ?? '').trim()) p.push('Michigan county for disputes (Settings → Company)');
+  if (termsVersionOf(d) === TERMS_2026_10 && !String(d.venueCounty ?? '').trim()) p.push('Michigan county for disputes (Settings → Company)');
   return p;
 }
 
@@ -209,8 +210,8 @@ const stamp = (ms) => `${new Date(ms).toLocaleString('en-US', { timeZone: 'Ameri
 
 // Term rows for the fee schedule. Empty for a month-to-month version 1 agreement, which keeps its
 // document byte-identical to the one rendered before terms versions existed.
-function termRows(d, t, draft) {
-  if (!t.termMonths && !draft) return '';
+function termRows(d, t, revised) {
+  if (!t.termMonths && !revised) return '';
   const rows = [['Term', t.termMonths ? `${t.termMonths} months from the monthly billing start date, then month to month` : 'Month to month']];
   if (t.monthlyDiscount) rows.push([`Term discount (${pctText(t.discountPct)} of monthly fees)`, `−${money(t.monthlyDiscount)}/mo`], ['Monthly fees after discount', `${money(t.monthlyNet)}/mo`]);
   if (t.termMonths) rows.push([`Contract value for the term (one-time fees plus ${t.termMonths} months of monthly fees)`, money(t.termValue)]);
@@ -223,9 +224,9 @@ export function renderContract(c, signature = null) {
   const d = c.data;
   const t = contractTotals(d);
   const version = termsVersionOf(d);
-  const draft = version === TERMS_DRAFT;
+  const revised = version === TERMS_2026_10;
   const statement = signingStatementFor(d);
-  const v1Term = draft ? '' : v1TermClause(d);
+  const v1Term = revised ? '' : v1TermClause(d);
   const banner = signature ? 'Signed agreement' : c.status === 'sent' ? 'Agreement for signature' : 'Draft for review, not ready for signature';
   const attachments = d.attachments || [];
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow">
@@ -255,7 +256,7 @@ tr.total td{font-weight:700;border-top:2px solid #17202b}
 </style></head><body>
 <header><img src="${esc(c.origin)}/detcord-logo-transparent.png" alt="Detcord Digital"><br><span class="banner">${banner}</span>
 <h1>${esc(c.title)}</h1>
-<div class="meta">Agreement ${esc(c.number)} · Version ${esc(c.version)}${draft ? ` · Terms ${esc(version)}` : ''} · Prepared ${esc(day(c.issuedAt || c.createdAt))}</div></header>
+<div class="meta">Agreement ${esc(c.number)} · Version ${esc(c.version)}${revised ? ` · Terms ${esc(version)}` : ''} · Prepared ${esc(day(c.issuedAt || c.createdAt))}</div></header>
 
 <h2>Parties</h2>
 <div class="parties">
@@ -276,7 +277,7 @@ ${(d.services || []).map((s) => `<tr><td>${esc(s.name)}</td><td class="n">${mone
 <table><tbody>
 <tr><td>Deposit due at signing</td><td class="n">${money(t.deposit)}</td></tr>
 <tr><td>Remaining one-time balance after deposit</td><td class="n">${money(t.setupAfterDeposit)}</td></tr>
-<tr><td>Monthly billing begins</td><td class="n">${esc(d.monthlyStart ? day(Date.parse(d.monthlyStart + 'T12:00:00Z')) : t.monthly ? 'Not entered' : 'No monthly services')}</td></tr>${termRows(d, t, draft)}
+<tr><td>Monthly billing begins</td><td class="n">${esc(d.monthlyStart ? day(Date.parse(d.monthlyStart + 'T12:00:00Z')) : t.monthly ? 'Not entered' : 'No monthly services')}</td></tr>${termRows(d, t, revised)}
 </tbody></table>
 <p>Currency: USD. Overlapping deliverables are assigned once and not billed twice. Deposits are credited against the one-time fees above.
 Payment schedule and milestones: ${esc(d.paymentTerms || 'Deposit at signing; remaining one-time fees on completion; monthly fees invoiced each month in advance.')}
