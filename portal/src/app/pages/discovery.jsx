@@ -211,7 +211,7 @@ function Summary({ result, client, onEdit }) {
     <div class="page" style="max-width:980px">
       <div class="page-head">
         <div><a class="small muted" href={`/clients/${client.id}?tab=discovery`}>← {client.name}</a><h1>Discovery results</h1><p class="sub">Recommended services were added to the client record, and the follow-up is on your task list.</p></div>
-        <div class="row"><button class="btn secondary" onClick={onEdit}>Edit answers</button><a class="btn" href={`/clients/${client.id}`}>Back to client</a></div>
+        <div class="row"><button class="btn secondary" onClick={onEdit}>Edit answers</button><a class="btn secondary" href={`/clients/${client.id}?tab=proposals`}>Build a proposal</a><a class="btn" href={`/clients/${client.id}`}>Back to client</a></div>
       </div>
       <div class="grid main-side">
         <div class="stack">

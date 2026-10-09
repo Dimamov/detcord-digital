@@ -19,6 +19,7 @@ import { MeetingPage } from './pages/meetings.jsx';
 import { SocialPage, SocialPostPage } from './pages/social.jsx';
 import { ReportsPage, MonthlyReportPage } from './pages/reports.jsx';
 import { BusinessPage } from './pages/business.jsx';
+import { ProposalPage } from './pages/proposals.jsx';
 
 const PUBLIC = [
   ['/login', Login],
@@ -55,6 +56,7 @@ const PRIVATE = [
   ['/meetings/:id', MeetingPage, ['admin', 'rep']],
   ['/social', SocialPage, ['client']],
   ['/social/:id', SocialPostPage, ['admin', 'rep', 'client']],
+  ['/proposals/:id', ProposalPage, ['admin', 'rep', 'client']],
 ];
 
 const NAV = {

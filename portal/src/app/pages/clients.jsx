@@ -12,6 +12,7 @@ import { GoatTab } from './goat.jsx';
 import { SocialTab } from './social.jsx';
 import { MeetingsTab } from './meetings.jsx';
 import { ReportsTab } from './reports.jsx';
+import { ProposalsTab } from './proposals.jsx';
 import { GoogleAdsCard } from './google-ads.jsx';
 import { ServiceRequestsCard } from './business.jsx';
 
@@ -146,7 +147,7 @@ export function NewClient({ user }) {
 }
 
 // ---------- Client record ----------
-const TABS = [['overview', 'Overview'], ['goat', 'Requests'], ['social', 'Social'], ['audits', 'Website check'], ['reports', 'Reports'], ['meetings', 'Meetings'], ['discovery', 'Discovery'], ['deals', 'Deals'], ['contracts', 'Agreements'], ['billing', 'Billing'], ['files', 'Files'], ['tasks', 'Tasks'], ['notes', 'Notes'], ['access', 'Portal access']];
+const TABS = [['overview', 'Overview'], ['goat', 'Requests'], ['social', 'Social'], ['audits', 'Website check'], ['reports', 'Reports'], ['meetings', 'Meetings'], ['discovery', 'Discovery'], ['proposals', 'Proposals'], ['deals', 'Deals'], ['contracts', 'Agreements'], ['billing', 'Billing'], ['files', 'Files'], ['tasks', 'Tasks'], ['notes', 'Notes'], ['access', 'Portal access']];
 
 export function ClientRecord({ id, user }) {
   if (user.role === 'client') return <ClientOwnRecord id={id} />;
@@ -195,6 +196,7 @@ function StaffClientRecord({ id, user }) {
       {tab === 'meetings' && <MeetingsTab client={c} />}
       {tab === 'audits' && <AuditsTab client={c} user={user} onChanged={reload} />}
       {tab === 'reports' && <ReportsTab client={c} />}
+      {tab === 'proposals' && <ProposalsTab client={c} />}
     </div>
   );
 }
