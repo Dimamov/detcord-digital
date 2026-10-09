@@ -79,6 +79,18 @@ r.post('/clients/:id/audits', async (c) => {
   return c.json(staffView(row), row.status === 'done' ? 201 : 200);
 });
 
+// People who could receive the report, with whether they already have a portal login.
+export function peopleFor(client, logins, contacts) {
+  const people = [];
+  for (const p of [...logins.map((l) => ({ ...l, login: l.status })), ...contacts]) {
+    const same = people.find((x) => (p.email && x.email === p.email) || (!p.email && x.name === p.name));
+    if (same) { same.phone ||= p.phone; same.login ||= p.login; continue; }
+    people.push({ name: p.name, email: p.email || '', phone: p.phone || '', login: p.login || null });
+  }
+  if (!people.length) people.push({ name: '', email: client.email || '', phone: client.phone || '', login: null });
+  return people;
+}
+
 r.get('/audits/:id', async (c) => {
   const { client, audit } = await loadAudit(c, c.req.param('id'));
   const db = c.env.DB;
@@ -87,14 +99,7 @@ r.get('/audits/:id', async (c) => {
     db.prepare('SELECT name, email, phone FROM contacts WHERE client_id=? ORDER BY is_primary DESC, name').bind(client.id).all(),
     db.prepare('SELECT u.name, u.email, u.phone, u.status FROM client_members m JOIN users u ON u.id=m.user_id WHERE m.client_id=? ORDER BY u.name').bind(client.id).all(),
   ]);
-  // People who could receive the report, with whether they already have a portal login.
-  const people = [];
-  for (const p of [...logins.results.map((l) => ({ ...l, login: l.status })), ...contacts.results]) {
-    const same = people.find((x) => (p.email && x.email === p.email) || (!p.email && x.name === p.name));
-    if (same) { same.phone ||= p.phone; same.login ||= p.login; continue; }
-    people.push({ name: p.name, email: p.email || '', phone: p.phone || '', login: p.login || null });
-  }
-  if (!people.length) people.push({ name: '', email: client.email || '', phone: client.phone || '', login: null });
+  const people = peopleFor(client, logins.results, contacts.results);
   return c.json(staffView(audit, {
     client: { id: client.id, name: client.name, city: client.city },
     deliveries: deliveries.results,
@@ -129,9 +134,9 @@ r.delete('/audits/:id', async (c) => {
   return c.json({ ok: true });
 });
 
-// Finds or creates the customer's portal login and returns the link that opens the report:
-// a password-setup invite for new or not-yet-activated logins, or the report page for active ones.
-async function portalLink(c, client, auditId, { name, email, phone }) {
+// Finds or creates the customer's portal login and returns the link that opens the report (or `next`):
+// a password-setup invite for new or not-yet-activated logins, or the page itself for active ones.
+export async function portalLink(c, client, auditId, { name, email, phone }, { next = `/reports/${auditId}`, purpose = 'view a website check' } = {}) {
   const db = c.env.DB;
   let user = await db.prepare('SELECT * FROM users WHERE email=?').bind(email).first();
   if (user) {
@@ -144,9 +149,8 @@ async function portalLink(c, client, auditId, { name, email, phone }) {
       db.prepare("INSERT INTO users (id, email, name, role, status, phone, created_at) VALUES (?,?,?,'client','invited',?,?)").bind(user.id, email, name, phone || null, now()),
       addMember(db, client.id, user.id),
     ]);
-    await logActivity(db, { clientId: client.id, actorId: requireUser(c).id, kind: 'invite', summary: `Created a portal login for ${name} to view a website check` });
+    await logActivity(db, { clientId: client.id, actorId: requireUser(c).id, kind: 'invite', summary: `Created a portal login for ${name} to ${purpose}` });
   }
-  const next = `/reports/${auditId}`;
   if (user.status === 'active') return { user, kind: 'login', url: `${originOf(c)}${next}` };
   const link = await issueLink(c, user, 'invite', { notify: false, ttlMs: REPORT_INVITE_MS, next });
   return { user, kind: 'invite', url: link.url };

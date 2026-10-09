@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { api, useLoad, navigate, toast, query, date, dateTime, ago } from '../lib.js';
 import { Icon, Loading, ErrorBox, Empty, Field, Dialog, useAction, CopyButton, Spinner } from '../ui.jsx';
+import { QuestionnaireInvite } from './questionnaire.jsx';
 
 const STEPS = ['Loading the homepage', 'Reading key pages, links and images', 'Running Google\'s mobile and desktop speed tests', 'Looking up the Google Business Profile and nearby competitors', 'Scoring and writing up the findings'];
 const SEVERITY = {
@@ -129,6 +130,7 @@ export function AuditPage({ id, user }) {
             <a class="btn ghost" href={`/reports/${a.id}`}><Icon name="eye" />Customer view</a>
             <button class="btn secondary" onClick={() => setSending('sms')}><Icon name="phone" />Text</button>
             <button class="btn" onClick={() => setSending('email')}><Icon name="mail" />Email</button>
+            <QuestionnaireInvite clientId={a.clientId} compact />
           </div>
         )}
       </div>
@@ -249,6 +251,7 @@ export function ReportPage({ id, user }) {
         </div>
         <p class="faint small">{d.contact.email}</p>
       </div>
+      {!d.preview && <p class="center no-print"><a class="btn secondary" href={`/questionnaire/${d.clientId}`}><Icon name="doc" />Answer your business questionnaire</a></p>}
       <p class="faint small center">Results reflect the website and Google listing on {date(d.checkedAt)}.</p>
     </div>
   );

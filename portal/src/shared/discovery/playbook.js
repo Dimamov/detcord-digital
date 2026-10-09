@@ -58,6 +58,9 @@ export const RED_FLAGS = [
 export const RECOMMENDATIONS = [
   { when: { id: 'rank_check', in: ['not-found', 'page1', 'unknown'] }, services: ['seo', 'gbp'], weight: 3, because: 'Not in the top 3 on Google Maps for their main service.' },
   { when: { id: 'gbp_claimed', in: ['not-sure', 'no'] }, services: ['gbp', 'citations'], weight: 3, because: 'They don’t control their Google Business Profile.' },
+  { when: { id: 'gbp_exists', eq: false }, services: ['gbp', 'citations'], weight: 3, because: 'No Google Business Profile was found.' },
+  { when: { id: 'mobile_friendly', eq: false }, services: ['web'], weight: 3, because: 'The website doesn’t work well on phones.' },
+  { when: { id: 'speed_mobile', lte: 49 }, services: ['web'], weight: 2, because: 'Google rates the site slow on phones.' },
   { when: { id: 'ai_check', in: ['yes-not', 'no'] }, services: ['ai-search'], weight: 1, because: 'Not showing (or unchecked) in AI assistant recommendations.' },
   { when: { id: 'website_status', in: ['none', 'embarrassed'] }, services: ['web'], weight: 4, because: 'No website, or they are embarrassed by it.' },
   { when: { id: 'website_status', in: ['ok'] }, services: ['web'], weight: 1, because: 'Website is only “OK”; conversion improvements likely pay off.' },
@@ -149,7 +152,7 @@ export const OBJECTIONS = [
 export const INTAKE = {
   intro: 'A few quick questions so your Detcord strategist can come prepared. It takes about 3 minutes.',
   questions: [
-    q('website', 'Your website', 'text', { placeholder: 'www.example.com', optional: true, mapTo: null }),
+    q('website', 'Your website', 'text', { placeholder: 'www.example.com', optional: true, mapTo: 'website' }),
     q('top_services', 'Which services or products bring in the most money?', 'long', { mapTo: 'top_services' }),
     q('service_area', 'What towns or areas do you serve?', 'long', { mapTo: 'service_area' }),
     q('lead_sources', 'Where do new customers come from today?', 'multi', {

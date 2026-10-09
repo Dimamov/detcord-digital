@@ -86,6 +86,26 @@ confirming the customer agreed to it. If email or texting isn't connected, nothi
 link to pass on. The check stays within the free plan's 50 subrequests per request. For local testing against a site on your machine, run
 `npx wrangler dev --env staging --var AUDIT_ALLOW_PRIVATE:1 --var AUDIT_SKIP_GOOGLE:1`; production refuses private addresses.
 
+## Discovery calls
+
+The rep runs the call from a client's **Discovery** tab with the guided script. Answers autosave one request at a time,
+and the server merges each save onto the latest stored answers, so overlapping saves never drop an answer.
+
+- **Prefilled answers.** A new discovery (and every reopen, so later forms and checks still land) fills empty questions
+  from the client record (name, website, city, industry), the latest submitted intake form, and the latest website
+  check (mobile and desktop speed scores, mobile setup, whether a Google profile was found, review count and rating).
+  Each shows "Prefilled from …" until the rep confirms or edits it. A prefill never replaces an answer the rep typed or cleared.
+- **Recap.** The last step, and a collapsible live panel on wide screens, lists every answer by section as the rep
+  types, with "Still to ask", the score preview and likely services. Any answer opens its question. **Copy recap** gives
+  plain text; **Send recap to client** drafts an email to copy (nothing is sent). The completed summary includes the recap.
+- **Client questionnaire.** **Invite client: report + questionnaire** (Discovery tab, or next to Email/Text on a website
+  check) emails or texts the client a portal link (password setup the first time) to `/questionnaire/<client>`, and
+  shares the latest website check with them. The questionnaire is an allowlist of client-appropriate questions
+  (`src/shared/discovery/questionnaire.js`); rep-only ones such as budget, competing quotes and contract terms are never
+  asked or writable there. Client answers fill the open discovery marked "Entered by the client"; once the rep has typed or
+  confirmed an answer, a different client answer only shows as a suggestion. Sending the answers gives the rep a task
+  and an email. The public pre-call intake link still works for prospects without a portal login.
+
 ## GOAT Command
 
 Clients ask for work in the portal (**Ask the GOAT**), by email to the GOAT address, or by text. All three become the
