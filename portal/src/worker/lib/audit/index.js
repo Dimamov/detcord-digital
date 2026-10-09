@@ -1,12 +1,14 @@
-// Runs one audit end to end: crawl, Google PageSpeed (mobile and desktop) and the Google profile, in parallel.
+// Runs one audit end to end: crawl, Google PageSpeed (mobile and desktop) and the Google profile, in parallel,
+// then Claude's review of the PageSpeed screenshots for the design and user experience section.
 import { crawl, checkTarget, Budget } from './crawl.js';
 import { pageSpeed, businessProfile } from './google.js';
 import { evaluate, CATEGORIES } from './checks.js';
+import { visualReview, lighthouseDesign } from './design.js';
 import { now } from '../util.js';
 
 export { CATEGORIES, checkTarget };
 
-// Free Workers plans allow 50 subrequests per request; Google calls use 4 of them.
+// Free Workers plans allow 50 subrequests per request; Google calls use 4 of them and the design review 1.
 const CRAWL_BUDGET = 40;
 
 export async function runAudit(env, { auditId, client, url }) {
@@ -20,7 +22,9 @@ export async function runAudit(env, { auditId, client, url }) {
       allowPrivate && env.AUDIT_SKIP_GOOGLE === '1' ? { ok: false, reason: 'Skipped in local development.' } : pageSpeed(env, target.url.href, 'desktop'),
       businessProfile(env, client, target.url.href),
     ]);
-    const report = evaluate({ client, crawl: site, mobile, desktop, gbp });
+    const visual = await visualReview(env, { client, url: site.home?.url || target.url.href, home: site.home?.parsed, mobile, desktop });
+    if (!visual.ok && env.ANTHROPIC_API_KEY) console.warn('Design review skipped', auditId, visual.reason);
+    const report = evaluate({ client, crawl: site, mobile, desktop, gbp, visual });
     const shots = {};
     for (const [name, r] of [['mobile', mobile], ['desktop', desktop]]) {
       const m = r?.ok && /^data:image\/(jpeg|png|webp);base64,(.+)$/.exec(r.screenshot || '');
@@ -40,6 +44,11 @@ export async function runAudit(env, { auditId, client, url }) {
       },
       google: gbp?.ok ? { profile: gbp.profile, competitors: gbp.competitors } : null,
       shots,
+      design: site.reachable ? {
+        lighthouse: lighthouseDesign(mobile, desktop),
+        visual: visual.ok ? { status: 'done', impression: visual.impression } : { status: 'skipped', reason: visual.reason },
+        page: { ctaTexts: site.home.parsed.layout.ctaTexts, topCtas: site.home.parsed.layout.topCtas, topTel: site.home.parsed.layout.topTel, navLabels: site.home.parsed.layout.navLabels },
+      } : null,
       facts: site.reachable ? {
         title: site.home.parsed.title, description: site.home.parsed.description, h1: site.home.parsed.headings.h1.slice(0, 3),
         words: site.home.parsed.words, https: site.https, sitemap: site.sitemap, responseMs: site.home.ms, linksChecked: site.links?.checked || 0,

@@ -7,7 +7,7 @@ import { TaskLine } from './dashboard.jsx';
 import { ContractsTab } from './contracts.jsx';
 import { BillingTab } from './billing.jsx';
 import { FilesPanel } from './files.jsx';
-import { AuditsTab } from './audits.jsx';
+import { AuditsTab, WebsiteCheckCard } from './audits.jsx';
 import { GoatTab } from './goat.jsx';
 import { SocialTab } from './social.jsx';
 import { MeetingsTab } from './meetings.jsx';
@@ -495,6 +495,7 @@ function DiscoveryTab({ data, reload }) {
         )}
       </div>
       <div class="stack">
+        <WebsiteCheckCard client={data.client} />
         <section class="card">
           <h2>Pre-call questions</h2>
           <p class="muted small" style="margin-top:0">Send the prospect a 3-minute form before the call. Answers pre-fill the discovery.</p>

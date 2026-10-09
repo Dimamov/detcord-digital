@@ -30,8 +30,11 @@ export const SERVICES = [
     description: 'Consistent posting, community replies and content calendars across Facebook, Instagram and more.' },
   { id: 'content', name: 'Content marketing', category: 'get-leads', origin: 'spec',
     description: 'Service pages, blogs, guides and FAQs that answer what buyers search for.' },
-  { id: 'email-sms', name: 'Email and SMS marketing', category: 'convert', origin: 'spec',
-    description: 'Newsletters, promotions, reminders and win-back campaigns to the customers you already have.' },
+  // Split from 'email-sms' on 2026-10-09 (migration 0016).
+  { id: 'email', name: 'Email marketing', category: 'convert', origin: 'spec',
+    description: 'Campaigns, newsletters and automated flows that turn past customers and leads into repeat jobs, with list hygiene and CAN-SPAM compliance.' },
+  { id: 'sms', name: 'SMS marketing', category: 'convert', origin: 'spec',
+    description: 'Text offers, reminders and win-back messages to customers who opted in, with consent records and STOP handling built in.' },
   { id: 'lead-response', name: 'Lead response: call tracking, missed-call text-back and AI receptionist', category: 'convert', origin: 'proposed',
     description: 'Never lose a lead to voicemail. Track every call source, text back missed calls instantly, answer after hours.' },
   { id: 'booking', name: 'Online booking and scheduling', category: 'convert', origin: 'proposed',
@@ -70,4 +73,11 @@ export const SERVICES = [
     description: 'Put AI tools to work in the office (quotes, replies, scheduling) and train the team to use them.' },
 ];
 
-export const serviceById = Object.fromEntries(SERVICES.map((s) => [s.id, s]));
+// Retired services stay in the database (inactive) so old deals and agreements keep their names.
+// They are never offered, recommended or suggested to Claude.
+export const RETIRED_SERVICES = [
+  { id: 'email-sms', name: 'Email and SMS marketing', category: 'convert', origin: 'spec', active: false, replacedBy: ['email', 'sms'],
+    description: 'Newsletters, promotions, reminders and win-back campaigns to the customers you already have.' },
+];
+
+export const serviceById = Object.fromEntries([...SERVICES, ...RETIRED_SERVICES].map((s) => [s.id, s]));

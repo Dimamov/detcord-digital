@@ -6,7 +6,7 @@ import { requireClient } from '../lib/auth.js';
 import { aiReady, originFor } from '../lib/goat.js';
 import { deepgramReady, MAX_AUDIO, AUDIO_TYPES, startTranscription, readDeepgram, questionsFor, analyzeMeeting, toDiscoveryAnswers } from '../lib/meetings.js';
 import { cleanAnswers } from './discovery.js';
-import { SERVICES } from '../../shared/services.js';
+import { serviceById } from '../../shared/services.js';
 
 const r = new Hono();
 const STALE_ANALYSIS_MS = 10 * 60 * 1000;
@@ -111,7 +111,7 @@ r.get('/meetings/:id', async (c) => {
   return c.json({
     meeting: { ...shape({ ...m, client_name: client.name, rep_name: name(m.rep_id), consent_name: name(m.consent_by) }), transcript: m.transcript ? JSON.parse(m.transcript) : [], analysis: m.analysis ? JSON.parse(m.analysis) : null },
     questions: m.analysis ? Object.fromEntries(questionsFor(client.industry).map((q) => [q.id, { q: q.q, section: q.section, type: q.type, options: q.options }])) : {},
-    services: Object.fromEntries(SERVICES.map((s) => [s.id, s.name])),
+    services: Object.fromEntries(Object.values(serviceById).map((s) => [s.id, s.name])),
     ready: { transcription: deepgramReady(c.env), ai: aiReady(c.env) },
   });
 });
@@ -192,7 +192,7 @@ r.post('/meetings/:id/save', async (c) => {
     list('Goals', a.goals);
     list('Objections', a.objections);
     for (const [label, v] of [['Budget', a.budget], ['Timeline', a.timeline], ['Decision makers', a.decision_makers]]) if (v) lines.push('', `${label}: ${v}`);
-    const services = pick(a.service_interest, b.services).map((s) => `- ${SERVICES.find((x) => x.id === s.service_id)?.name || s.service_id}: ${s.reason}`);
+    const services = pick(a.service_interest, b.services).map((s) => `- ${serviceById[s.service_id]?.name || s.service_id}: ${s.reason}`);
     if (services.length) lines.push('', 'Services to recommend:', ...services);
     await db.prepare("INSERT INTO notes (id, client_id, author_id, body, visibility, created_at) VALUES (?,?,?,?,'internal',?)")
       .bind(newId(), client.id, user.id, lines.join('\n').slice(0, 20000), t).run();

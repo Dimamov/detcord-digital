@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { env, SELF } from 'cloudflare:test';
 import { as, PASSWORD } from './helpers.js';
 import { verifyCloverSignature, cloverConfig } from '../src/worker/lib/clover.js';
-import { signingProblems, SERVICE_TERMS, REVIEW_TERMS } from '../src/shared/contract.js';
+import { signingProblems, needsReview, SERVICE_TERMS, REVIEW_TERMS } from '../src/shared/contract.js';
 import { SERVICES } from '../src/shared/services.js';
 
 const BASE = 'https://portal.test';
@@ -65,7 +65,10 @@ afterEach(() => vi.restoreAllMocks());
 
 describe('contract language', () => {
   it('every catalog service has terms, and new wording is flagged for legal review', () => {
-    for (const s of SERVICES) expect(SERVICE_TERMS[s.id] || REVIEW_TERMS[s.id], s.id).toBeTruthy();
+    // Email and SMS marketing (split from email-sms) have no wording yet: agreements use the generic line and flag them for review.
+    const noTermsYet = ['email', 'sms'];
+    for (const s of SERVICES) if (!noTermsYet.includes(s.id)) expect(SERVICE_TERMS[s.id] || REVIEW_TERMS[s.id], s.id).toBeTruthy();
+    for (const id of noTermsYet) expect(needsReview(id), id).toBe(true);
     expect(Object.keys(REVIEW_TERMS).sort()).toEqual(['accessibility', 'booking', 'citations', 'lsa']);
   });
 
