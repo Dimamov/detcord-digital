@@ -79,11 +79,24 @@ PageSpeed on mobile and desktop, and looks up the Google Business Profile and th
 scored findings in four areas (search visibility, local search and Google profile, mobile and customer experience, speed
 security and site health), each with what was found, why it matters, how to fix it, and the matching Detcord service.
 
+A fifth area, **Design and user experience**, is scored separately and left out of the overall score, so overall scores
+stay comparable with older checks. It combines checks the page's code proves (a call to action and tap-to-call link in
+the header or first section, a form on the homepage, form length, zoom-blocking or missing viewport settings, very small
+text in the page's own styles, menu size, trust signals such as licensed and insured or a guarantee), Google's
+accessibility and best-practices scores and failing design audits (tap targets, font sizes, contrast, image aspect,
+viewport) from both tests, and the phone and desktop screenshots. When `ANTHROPIC_API_KEY` is set, Claude reviews the
+two screenshots and a short summary of the page (title, H1, calls to action, menu) and adds a first impression and 3 to
+6 findings, told to describe only what is visible and never invent numbers. Those findings are labeled "from the visual
+review", can be hidden like any other, and are never scored. Without the key, or if Claude fails, the check still
+finishes and the report says the visual review wasn't run. The client's **Discovery** tab shows the latest check's
+scores and first impression.
+
 Staff can hide findings and add a note, then press **Email** or **Text**. The message carries a link into the
 customer's portal: the first time, a one-time password setup link (7 days) that creates their client login and opens the
 report; after that, a sign-in link to `/reports/<id>`. Customers only see checks that were sent to them. Texting requires
 confirming the customer agreed to it. If email or texting isn't connected, nothing is claimed as sent and staff get the
-link to pass on. The check stays within the free plan's 50 subrequests per request. For local testing against a site on your machine, run
+link to pass on. The check stays within the free plan's 50 subrequests per request: up to 40 for the crawl, 4 for
+Google and 1 for the design review (no retries). For local testing against a site on your machine, run
 `npx wrangler dev --env staging --var AUDIT_ALLOW_PRIVATE:1 --var AUDIT_SKIP_GOOGLE:1`; production refuses private addresses.
 
 ## GOAT Command

@@ -7,7 +7,7 @@ import { sendEmail, renderEmail } from '../lib/email.js';
 import { sendSms, toE164, twilioConfig, testTwilio } from '../lib/sms.js';
 import { pageSpeed } from '../lib/audit/google.js';
 import { getSettings, putSetting } from '../lib/settings.js';
-import { SERVICES } from '../../shared/services.js';
+import { serviceById } from '../../shared/services.js';
 
 const r = new Hono();
 const originOf = (c) => c.env.PUBLIC_URL || new URL(c.req.url).origin;
@@ -15,7 +15,7 @@ const STALE_MS = 5 * 60 * 1000;
 // A prospect may open the report days after the call, so report invites last longer than team invites.
 const REPORT_INVITE_MS = 7 * 24 * 3600 * 1000;
 const DAILY_LIMIT = 60;
-const serviceName = Object.fromEntries(SERVICES.map((s) => [s.id, s.name]));
+const serviceName = Object.fromEntries(Object.values(serviceById).map((s) => [s.id, s.name]));
 
 // An audit whose request died mid-run is reported as failed rather than "running" forever.
 async function settleStale(db, row) {
@@ -45,7 +45,7 @@ function staffView(a, extra = {}) {
 r.get('/clients/:id/audits', async (c) => {
   const { client } = await requireClient(c, c.req.param('id'), { staffOnly: true });
   const rows = (await c.env.DB.prepare(`SELECT a.id, a.url, a.status, a.score, a.error, a.created_at, a.finished_at, u.name AS by_name,
-      a.shared_at
+      a.shared_at, json_extract(a.result, '$.scores.design') AS design_score, json_extract(a.result, '$.design.visual.impression') AS design_impression
     FROM audits a LEFT JOIN users u ON u.id=a.created_by WHERE a.client_id=? ORDER BY a.created_at DESC LIMIT 50`).bind(client.id).all()).results;
   const settled = [];
   for (const row of rows) settled.push(await settleStale(c.env.DB, row));
@@ -181,7 +181,7 @@ r.post('/audits/:id/send', async (c) => {
       omitLogo: user.role === 'admin' && body.omitLogo === true,
       heading: `Your website check: ${result.overall}/100`,
       paragraphs: [
-        `Hi ${first}, we ran a full check of ${client.name}'s website and Google presence: search visibility, local search, mobile experience, speed and security.`,
+        `Hi ${first}, we ran a full check of ${client.name}'s website and Google presence: search visibility, local search, mobile experience, speed and security, plus a review of the site's design and user experience.`,
         ...(audit.note ? [audit.note] : []),
         top.length ? `The biggest opportunities we found: ${top.map((f) => f.title.replace(/\.$/, '')).join('; ')}.` : 'Your site is in good shape. The report lists a few smaller improvements.',
         invite ? 'Your report is waiting in your Detcord portal. Create a password to open it; you can sign in any time after that to see it again.' : 'Your report is in your Detcord portal. Sign in to see it.',
@@ -230,7 +230,7 @@ r.get('/reports/:id', async (c) => {
   const company = await getSettings(c.env.DB, 'company.');
   const res = JSON.parse(a.result);
   const hidden = new Set(JSON.parse(a.hidden || '[]'));
-  const findings = res.findings.filter((f) => !hidden.has(f.id)).map(({ id, cat, severity, title, detail, why, fix, service }) => ({ id, cat, severity, title, detail, why, fix, service: serviceName[service] || null }));
+  const findings = res.findings.filter((f) => !hidden.has(f.id)).map(({ id, cat, severity, title, detail, why, fix, service, source, view }) => ({ id, cat, severity, title, detail, why, fix, service: serviceName[service] || null, source: source || null, view: view || null }));
   return c.json({
     id: a.id,
     preview: isStaff(user),
@@ -246,7 +246,9 @@ r.get('/reports/:id', async (c) => {
     passed: res.passed,
     speed: res.speed,
     google: res.google ? { profile: res.google.profile && { name: res.google.profile.name, rating: res.google.profile.rating, reviews: res.google.profile.reviews, mapsUrl: res.google.profile.mapsUrl, photos: res.google.profile.photos, hours: !!res.google.profile.hours }, competitors: res.google.competitors } : null,
-    coverage: { pagespeed: res.coverage.pagespeed, google: res.coverage.google },
+    coverage: { pagespeed: res.coverage.pagespeed, google: res.coverage.google, visual: res.coverage.visual || null },
+    // Checks run before the design section existed have none; the page then shows the four original areas only.
+    design: res.design ? { lighthouse: res.design.lighthouse, visual: { status: res.design.visual.status, impression: res.design.visual.impression || null } } : null,
     pagesChecked: res.pagesChecked,
     facts: res.facts ? { linksChecked: res.facts.linksChecked } : null,
     note: a.note,
