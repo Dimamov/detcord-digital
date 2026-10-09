@@ -54,6 +54,8 @@ export async function notifyEmailFailure(env, email, status, reason, eventId = e
   const summary = `Email ${status}: ${email.recipient} — ${String(reason || 'No reason supplied').slice(0, 500)}`;
   await env.DB.prepare('INSERT OR IGNORE INTO activity (id,kind,summary,created_at) VALUES (?,?,?,?)')
     .bind(`email-alert/${eventId}`, 'email_delivery', summary, Date.now()).run();
+  // A missing key is a setup problem shown under Integrations, not something a rep can fix.
+  if (status !== 'not_configured') await raiseInPortal(env, email, status, reason, eventId);
   if (!env.EMAIL_ALERT_TO || !env.RESEND_API_KEY) return false;
   // Alert failures are recorded, but never generate further alerts.
   const result = await sendEmail(env, {
@@ -62,6 +64,29 @@ export async function notifyEmailFailure(env, email, status, reason, eventId = e
     idempotencyKey: `delivery-alert/${eventId}`, isAlert: true,
   });
   return result.status === 'sent';
+}
+
+// In-portal alert for a failed send: a task due today for the client's reps (admins when the email
+// isn't tied to a client), plus an internal note on the client record. Repeated events don't duplicate.
+async function raiseInPortal(env, email, status, reason, eventId) {
+  const db = env.DB;
+  const to = String(email.recipient || '').toLowerCase();
+  const client = await db.prepare(`SELECT id, name FROM clients WHERE lower(email)=?1
+      UNION SELECT cl.id, cl.name FROM contacts ct JOIN clients cl ON cl.id=ct.client_id WHERE lower(ct.email)=?1
+      UNION SELECT cl.id, cl.name FROM users u JOIN client_members m ON m.user_id=u.id JOIN clients cl ON cl.id=m.client_id WHERE u.email=?1 AND u.role='client'
+      LIMIT 1`).bind(to).first();
+  let owners = client ? (await db.prepare("SELECT a.user_id id FROM assignments a JOIN users u ON u.id=a.user_id WHERE a.client_id=? AND u.status='active'").bind(client.id).all()).results : [];
+  if (!owners.length) owners = (await db.prepare("SELECT id FROM users WHERE role='admin' AND status='active'").all()).results;
+  const why = String(reason || 'no reason given').slice(0, 200);
+  const title = `Email to ${email.recipient} didn't go through (${status}): "${String(email.subject || '').slice(0, 80)}". Check the address and resend.`;
+  const at = Date.now();
+  const stmts = owners.map((o) => db.prepare('INSERT OR IGNORE INTO tasks (id, client_id, owner_id, title, due_at, created_by, created_at) VALUES (?,?,?,?,?,?,?)')
+    .bind(`email-fail/${eventId}/${o.id}`, client?.id || null, o.id, title, at, 'system', at));
+  if (client) {
+    stmts.push(db.prepare("INSERT OR IGNORE INTO notes (id, client_id, author_id, body, visibility, created_at) VALUES (?,?,NULL,?,'internal',?)")
+      .bind(`email-fail/${eventId}`, client.id, `Email not delivered to ${email.recipient} (${status}): "${email.subject}". Reason: ${why}`, at));
+  }
+  if (stmts.length) await db.batch(stmts);
 }
 
 async function sendRawEmail(env, { to, subject, html, text, idempotencyKey }) {
