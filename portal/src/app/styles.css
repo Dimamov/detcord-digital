@@ -195,7 +195,14 @@ tr.click:hover td { background: var(--surface-2); }
 .empty img { width: 72px; height: 72px; border-radius: 50%; margin: 0 auto 12px; opacity: .9; }
 .empty strong { display: block; color: var(--text); font-size: 16px; margin-bottom: 4px; }
 
-.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 18px; overflow-x: auto; scrollbar-width: none; }
+.tabs { display: flex; flex-wrap: wrap; gap: 0 4px; border-bottom: 1px solid var(--line); margin-bottom: 18px; }
+/* Phones: one scrolling row with a visible scrollbar, so it is clear more tabs sit off to the right. */
+@media (max-width: 860px) {
+  .tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; scrollbar-color: var(--line) transparent; padding-bottom: 2px; padding-right: 24px; }
+  .tabs::-webkit-scrollbar { height: 4px; }
+  .tabs { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
+  .tabs::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
+}
 .tabs button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 10px 12px; color: var(--muted); cursor: pointer; font-weight: 600; white-space: nowrap; }
 .tabs button[aria-selected='true'] { color: var(--text); border-bottom-color: var(--accent); }
 

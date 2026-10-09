@@ -156,6 +156,13 @@ export function ClientRecord({ id, user }) {
 function StaffClientRecord({ id, user }) {
   const [tab, setTab] = useState(query().tab || 'overview');
   const { loading, data, error, reload } = useLoad(`/clients/${id}`);
+  // On phones the tab row scrolls sideways; keep the open tab in view (for example after a ?tab= link).
+  useEffect(() => {
+    const el = document.querySelector('.tabs [aria-selected="true"]');
+    if (!el) return;
+    const row = el.parentElement, r = el.getBoundingClientRect(), pr = row.getBoundingClientRect();
+    if (r.left < pr.left || r.right > pr.right) row.scrollLeft += r.left - pr.left - 16;
+  }, [tab, loading]);
   if (loading) return <div class="page"><Loading /></div>;
   if (error) return <div class="page"><ErrorBox error={error} retry={reload} /></div>;
   const c = data.client;
