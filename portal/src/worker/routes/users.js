@@ -49,7 +49,8 @@ r.post('/', async (c) => {
     clientId = body.clientId;
     await requireClient(c, clientId, { write: true });
   }
-  if (await db.prepare('SELECT 1 FROM users WHERE email=?').bind(email).first()) fail(409, 'Someone already has a portal account with that email.');
+  const existing = await db.prepare('SELECT * FROM users WHERE email=?').bind(email).first();
+  if (existing) return inviteExisting(c, actor, existing, role, clientId);
   const user = { id: newId(), email, name, role };
   const stmts = [db.prepare("INSERT INTO users (id, email, name, role, status, phone, created_at) VALUES (?,?,?,?,'invited',?,?)")
     .bind(user.id, email, name, role, text(body.phone, { max: 40 }), now())];
@@ -59,6 +60,24 @@ r.post('/', async (c) => {
   await logActivity(db, { clientId, actorId: actor.id, kind: 'invite', summary: `Invited ${name} (${role})` });
   return c.json({ id: user.id, ...linkResponse(link) }, 201);
 });
+
+// The email already has a login (often created when a website check was sent to that person).
+// A client login is linked to this business and re-invited, instead of failing.
+async function inviteExisting(c, actor, existing, role, clientId) {
+  const db = c.env.DB;
+  if (role !== 'client' || existing.role !== 'client') fail(409, existing.role === 'client' ? 'That email is a client login. Use a different email for a team member.' : 'That email belongs to a Detcord team login. Use the client\'s own email.');
+  if (existing.status === 'disabled') fail(409, 'That person\'s portal login is turned off. An admin can turn it back on under Team.');
+  const member = await db.prepare('SELECT 1 FROM client_members WHERE client_id=? AND user_id=?').bind(clientId, existing.id).first();
+  if (!member) await addMember(db, clientId, existing.id).run();
+  if (existing.status === 'active') {
+    if (member) fail(409, `${existing.name} already has a working login for this business. If they forgot the password, they can use "Forgot password" on the sign-in page.`);
+    await logActivity(db, { clientId, actorId: actor.id, kind: 'invite', summary: `Gave ${existing.name} access to this business` });
+    return c.json({ id: existing.id, existing: true, delivery: null }, 200);
+  }
+  const link = await issueLink(c, existing, 'invite');
+  await logActivity(db, { clientId, actorId: actor.id, kind: 'invite', summary: `Sent ${existing.name} a new invitation` });
+  return c.json({ id: existing.id, resent: true, ...linkResponse(link) }, 200);
+}
 
 async function loadTarget(c, id) {
   const actor = requireRole(c, 'admin', 'rep');

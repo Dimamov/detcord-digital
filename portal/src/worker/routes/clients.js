@@ -182,8 +182,27 @@ r.delete('/:id', async (c) => {
   const body = await readJson(c);
   if (String(body.confirm || '').trim() !== client.name) fail(400, 'Type the business name exactly to confirm.');
   const db = c.env.DB;
+  // Money records are kept: a client that has paid or signed is marked Former instead.
+  const money = await db.prepare("SELECT (SELECT COUNT(*) FROM payments WHERE client_id=? AND status='approved') + (SELECT COUNT(*) FROM contracts WHERE client_id=? AND status='signed') n").bind(client.id, client.id).first();
+  if (money.n) fail(409, 'This client has a signed agreement or a recorded payment, so it can’t be deleted. Set its status to Former instead.');
+  // Client logins that only belonged to this business go too, so their email can be invited again later.
+  const orphans = (await db.prepare("SELECT u.id FROM users u JOIN client_members m ON m.user_id=u.id WHERE m.client_id=? AND u.role='client' AND NOT EXISTS (SELECT 1 FROM client_members o WHERE o.user_id=u.id AND o.client_id<>?)").bind(client.id, client.id).all()).results.map((u) => u.id);
+  const keys = [
+    ...(await db.prepare('SELECT r2_key k FROM media WHERE client_id=?').bind(client.id).all()).results.map((r) => r.k),
+    ...(await db.prepare('SELECT r2_key k FROM meetings WHERE client_id=? AND r2_key IS NOT NULL').bind(client.id).all()).results.map((r) => r.k),
+    ...(await db.prepare('SELECT id FROM audits WHERE client_id=?').bind(client.id).all()).results.flatMap((a) => [`audits/${a.id}/mobile`, `audits/${a.id}/desktop`]),
+  ];
   const ids = ['contacts', 'client_services', 'notes', 'tasks', 'discoveries', 'intake_links', 'deals', 'assignments', 'client_members', 'activity'];
   await db.batch([...ids.map((t) => db.prepare(`DELETE FROM ${t} WHERE client_id=?`).bind(client.id)), db.prepare('DELETE FROM clients WHERE id=?').bind(client.id)]);
+  for (const id of orphans) {
+    try {
+      await db.batch([db.prepare('DELETE FROM sessions WHERE user_id=?').bind(id), db.prepare('DELETE FROM tokens WHERE user_id=?').bind(id), db.prepare('DELETE FROM users WHERE id=?').bind(id)]);
+    } catch {
+      // Still referenced somewhere: turn it off and free the email address instead.
+      await db.prepare("UPDATE users SET status='disabled', email=? WHERE id=?").bind(`deleted-${id}@invalid.local`, id).run();
+    }
+  }
+  for (let i = 0; c.env.MEDIA && i < keys.length; i += 1000) await c.env.MEDIA.delete(keys.slice(i, i + 1000));
   await logActivity(db, { actorId: user.id, kind: 'client_deleted', summary: `Deleted client ${client.name}` });
   return c.json({ ok: true });
 });

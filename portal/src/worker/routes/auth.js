@@ -109,8 +109,9 @@ r.post('/forgot', async (c) => {
   const key = `forgot:${await sha256(ip)}`;
   await throttle(db, key, 10);
   await recordFailure(db, key);
-  const user = email ? await db.prepare("SELECT * FROM users WHERE email=? AND status='active'").bind(email).first() : null;
-  if (user) await issueLink(c, user, 'reset');
+  const user = email ? await db.prepare("SELECT * FROM users WHERE email=? AND status IN ('active','invited')").bind(email).first() : null;
+  // Someone who never finished setting up gets a fresh setup link instead of a reset link.
+  if (user) await issueLink(c, user, user.status === 'active' ? 'reset' : 'invite');
   return c.json({ ok: true, message: 'If that email has a portal account, a reset link is on its way.' });
 });
 
