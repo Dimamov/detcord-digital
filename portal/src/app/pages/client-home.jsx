@@ -3,6 +3,7 @@ import { Loading, ErrorBox, Empty, Avatar, Icon } from '../ui.jsx';
 import { session } from '../lib.js';
 import { ReportsCard } from './audits.jsx';
 import { MonthlyReportsCard } from './reports.jsx';
+import { ProposalsCard } from './proposals.jsx';
 import { GoatCard } from './goat.jsx';
 import { Board } from '../board.jsx';
 
@@ -33,6 +34,7 @@ function BusinessView({ id, user, others }) {
 
       <ActionItems clientId={client.id} />
       <Board page="client-home" cards={[
+        { id: 'proposals', title: 'Proposals', col: 'top', node: <ProposalsCard /> },
         { id: 'reports', title: 'Reports', col: 'top', node: <ReportsCard /> },
         { id: 'monthly', title: 'Monthly reports', col: 'top', node: <MonthlyReportsCard /> },
         { id: 'goat', title: 'Ask the GOAT', col: 'top', node: <GoatCard clientId={client.id} user={user} /> },
@@ -100,13 +102,22 @@ function ActionItems({ clientId }) {
   const invoices = useLoad('/invoices');
   const social = useLoad(`/clients/${clientId}/social`, [clientId]);
   const posts = (social.data?.posts || []).filter((p) => p.status === 'pending_approval');
+  const questionnaire = useLoad(`/questionnaire/${clientId}`, [clientId]).data;
+  const askQuestions = questionnaire?.invitedAt && !questionnaire.submittedAt;
   const toSign = (contracts.data?.contracts || []).filter((c) => c.status === 'sent');
   const due = (invoices.data?.invoices || []).filter((i) => i.status === 'open');
-  if (!toSign.length && !due.length && !posts.length) return null;
+  if (!toSign.length && !due.length && !posts.length && !askQuestions) return null;
   return (
     <section class="card mb attention">
       <h2>Needs your attention</h2>
       <div class="list">
+        {askQuestions && (
+          <a class="list-item" href={`/questionnaire/${clientId}`}>
+            <Icon name="doc" />
+            <div style="flex:1"><div class="title">Answer your business questionnaire</div><div class="meta">About 10 minutes · honest, detailed answers get you the best recommendations</div></div>
+            <span class="btn sm">Start</span>
+          </a>
+        )}
         {toSign.map((c) => (
           <a class="list-item" href={`/contracts/${c.id}`}>
             <Icon name="pen" />

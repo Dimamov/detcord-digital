@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { api, useLoad, navigate, toast, query, date, dateTime, ago } from '../lib.js';
 import { Icon, Loading, ErrorBox, Empty, Field, Dialog, useAction, CopyButton, Spinner } from '../ui.jsx';
+import { QuestionnaireInvite } from './questionnaire.jsx';
 
-const STEPS = ['Loading the homepage', 'Reading key pages, links and images', 'Running Google\'s mobile and desktop speed tests', 'Looking up the Google Business Profile and nearby competitors', 'Scoring and writing up the findings'];
+const STEPS = ['Loading the homepage', 'Reading key pages, links and images', 'Running Google\'s mobile and desktop speed tests', 'Looking up the Google Business Profile and nearby competitors', 'Reviewing the design on a phone and a computer', 'Scoring and writing up the findings'];
 const SEVERITY = {
   critical: { label: 'Fix first', tone: 'bad', blurb: 'These cost you customers right now.' },
   important: { label: 'Fix next', tone: 'warn', blurb: 'Clear opportunities to rank higher and get more calls.' },
@@ -51,14 +52,14 @@ export function AuditsTab({ client, user, onChanged }) {
     <div class="stack">
       <div class="card">
         <div class="card-head"><h2>Website and Google check</h2></div>
-        <p class="muted small" style="margin-top:-6px">Checks search visibility, local search and the Google Business Profile, mobile experience, speed, security and broken links, then writes a plain-English report you can email or text to the customer.</p>
+        <p class="muted small" style="margin-top:-6px">Checks search visibility, local search and the Google Business Profile, mobile experience, design and user experience, speed, security and broken links, then writes a plain-English report you can email or text to the customer.</p>
         {running ? (
           <div class="audit-progress" role="status" aria-live="polite">
             <Spinner />
             <ol>
               {STEPS.map((s, i) => <li class={i < step ? 'done' : i === step ? 'now' : ''}>{i < step ? <Icon name="check" size={14} /> : <span class="dot" />}{s}</li>)}
             </ol>
-            <p class="faint small">This usually takes 20 to 60 seconds. Keep this page open.</p>
+            <p class="faint small">This usually takes 30 to 90 seconds. Keep this page open.</p>
           </div>
         ) : (
           <form class="row wrap" style="gap:10px;align-items:flex-end" onSubmit={(e) => { e.preventDefault(); start(); }}>
@@ -80,7 +81,7 @@ export function AuditsTab({ client, user, onChanged }) {
                 <span class={`score-pill ${tone(a.score)}`}>{a.status === 'done' ? a.score : a.status === 'running' ? '…' : '!'}</span>
                 <div style="flex:1;min-width:0">
                   <div class="truncate"><strong>{a.url.replace(/^https?:\/\//, '').replace(/\/$/, '')}</strong></div>
-                  <div class="faint small">{a.status === 'failed' ? a.error : a.status === 'running' ? 'Running now' : `${dateTime(a.created_at)}${a.by_name ? ` · ${a.by_name}` : ''}`}</div>
+                  <div class="faint small">{a.status === 'failed' ? a.error : a.status === 'running' ? 'Running now' : `${dateTime(a.created_at)}${a.by_name ? ` · ${a.by_name}` : ''}${a.design_score != null ? ` · design ${a.design_score}` : ''}`}</div>
                 </div>
                 {a.sent > 0 && <span class="badge good">Sent</span>}
                 <Icon name="arrow" />
@@ -90,6 +91,32 @@ export function AuditsTab({ client, user, onChanged }) {
         )}
       </div>
     </div>
+  );
+}
+
+// Discovery tab summary: the latest finished check, read-only, with its design review headline.
+export function WebsiteCheckCard({ client }) {
+  const { data } = useLoad(`/clients/${client.id}/audits`);
+  const a = data?.audits.find((x) => x.status === 'done');
+  return (
+    <section class="card">
+      <h2>Website check</h2>
+      {!data ? <Loading /> : !a ? (
+        <p class="muted small" style="margin:0">No check yet. <a href={`/clients/${client.id}?tab=audits`}>Run one</a> to open the call with what's holding the site back.</p>
+      ) : (
+        <>
+          <a class="list-item" style="padding:0 0 8px" href={`/audits/${a.id}`}>
+            <span class={`score-pill ${tone(a.score)}`}>{a.score}</span>
+            <div style="flex:1;min-width:0">
+              <div class="truncate"><strong>{a.url.replace(/^https?:\/\//, '').replace(/\/$/, '')}</strong></div>
+              <div class="faint small">{date(a.created_at)}{a.design_score != null ? ` · design and user experience ${a.design_score}` : ''}</div>
+            </div>
+            <Icon name="arrow" />
+          </a>
+          {a.design_impression && <p class="small muted" style="margin:0">{a.design_impression}</p>}
+        </>
+      )}
+    </section>
   );
 }
 
@@ -129,6 +156,7 @@ export function AuditPage({ id, user }) {
             <a class="btn ghost" href={`/reports/${a.id}`}><Icon name="eye" />Customer view</a>
             <button class="btn secondary" onClick={() => setSending('sms')}><Icon name="phone" />Text</button>
             <button class="btn" onClick={() => setSending('email')}><Icon name="mail" />Email</button>
+            <QuestionnaireInvite clientId={a.clientId} compact />
           </div>
         )}
       </div>
@@ -249,6 +277,7 @@ export function ReportPage({ id, user }) {
         </div>
         <p class="faint small">{d.contact.email}</p>
       </div>
+      {!d.preview && <p class="center no-print"><a class="btn secondary" href={`/questionnaire/${d.clientId}`}><Icon name="doc" />Answer your business questionnaire</a></p>}
       <p class="faint small center">Results reflect the website and Google listing on {date(d.checkedAt)}.</p>
     </div>
   );
@@ -288,9 +317,9 @@ function Report({ r, business, categories, serviceNames = {}, hidden, onToggle, 
         <ScoreRing score={r.overall} grade={r.grade} />
         <div style="flex:1;min-width:220px">
           <div class="cat-bars">
-            {categories.map((c) => (
-              <div class="cat-bar">
-                <div class="row between small"><span>{c.label}</span><strong>{r.scores[c.id] ?? '—'}</strong></div>
+            {categories.filter((c) => !c.separate || r.scores[c.id] !== undefined).map((c) => (
+              <div class={`cat-bar ${c.separate ? 'separate' : ''}`}>
+                <div class="row between small"><span>{c.label}{c.separate && <span class="faint"> · scored separately</span>}</span><strong>{r.scores[c.id] ?? '—'}</strong></div>
                 <div class="bar"><span class={tone(r.scores[c.id])} style={`width:${r.scores[c.id] ?? 0}%`} /></div>
               </div>
             ))}
@@ -312,9 +341,9 @@ function Report({ r, business, categories, serviceNames = {}, hidden, onToggle, 
         </div>
       )}
 
-      {(r.shots?.mobile || m) && (
+      {((r.shots?.mobile && !r.design) || m) && (
         <div class="card mt report-speed">
-          {r.shots?.mobile && <img class="phone-shot" src={`${shotBase}/mobile`} alt={`${business} homepage on a phone`} loading="lazy" />}
+          {r.shots?.mobile && !r.design && <img class="phone-shot" src={`${shotBase}/mobile`} alt={`${business} homepage on a phone`} loading="lazy" />}
           {m && (
             <div style="flex:1">
               <h3>Speed on a phone</h3>
@@ -329,6 +358,8 @@ function Report({ r, business, categories, serviceNames = {}, hidden, onToggle, 
           )}
         </div>
       )}
+
+      {r.design && <DesignSection r={r} business={business} staff={staff} shotBase={shotBase} />}
 
       {g && (
         <div class="card mt">
@@ -359,7 +390,7 @@ function Report({ r, business, categories, serviceNames = {}, hidden, onToggle, 
                   <article class={`card finding ${off ? 'off' : ''}`}>
                     <div class="row between" style="align-items:flex-start;gap:12px">
                       <div>
-                        <div class="faint small">{categories.find((c) => c.id === f.cat)?.label}</div>
+                        <div class="faint small">{categories.find((c) => c.id === f.cat)?.label}{f.source === 'visual' && ` · from the visual review${f.view && f.view !== 'both' ? ` (${f.view === 'mobile' ? 'phone' : 'computer'})` : ''}`}</div>
                         <h3 style="margin:2px 0 6px">{f.title}</h3>
                       </div>
                       {staff && <button class="btn sm ghost" onClick={() => onToggle(f.id)} title={off ? 'Show this to the customer' : 'Hide this from the customer'}><Icon name="eye" size={14} />{off ? 'Hidden' : 'Hide'}</button>}
@@ -382,7 +413,54 @@ function Report({ r, business, categories, serviceNames = {}, hidden, onToggle, 
           <div class="card"><ul class="passed">{r.passed.map((p) => <li><Icon name="check" size={14} />{p.title}</li>)}</ul></div>
         </section>
       )}
-      <p class="faint small mt">We checked {r.pagesChecked} page{r.pagesChecked === 1 ? '' : 's'}{r.facts?.linksChecked ? ` and ${r.facts.linksChecked} links` : ''}, Google's mobile and desktop tests, and Google Maps.</p>
+      <p class="faint small mt">We checked {r.pagesChecked} page{r.pagesChecked === 1 ? '' : 's'}{r.facts?.linksChecked ? ` and ${r.facts.linksChecked} links` : ''}, Google's mobile and desktop tests, and Google Maps.{r.design?.visual?.status === 'done' ? ' The visual review was written with AI (Claude) from screenshots of your homepage.' : ''}</p>
+    </div>
+  );
+}
+
+// Design and user experience: both screenshots, Google's accessibility and best-practices scores, the failing design
+// checks from Google's tests, and Claude's first impression when the visual review ran.
+function DesignSection({ r, business, staff, shotBase }) {
+  const d = r.design;
+  const lh = d.lighthouse || {};
+  const ran = d.visual?.status === 'done';
+  const score = r.scores?.design;
+  return (
+    <div class="card mt report-design">
+      <div class="row between" style="align-items:flex-start;gap:12px">
+        <div>
+          <h3 style="margin:0">Design and user experience</h3>
+          <p class="faint small" style="margin:2px 0 0">How your homepage looks and works for someone deciding whether to contact you. Scored separately; not part of the overall score.</p>
+        </div>
+        {score != null && <span class={`score-pill ${tone(score)}`}>{score}</span>}
+      </div>
+      {(r.shots?.mobile || r.shots?.desktop) && (
+        <div class="design-shots mt">
+          {r.shots?.mobile && <figure><img class="phone-shot" src={`${shotBase}/mobile`} alt={`${business} homepage on a phone`} loading="lazy" /><figcaption class="faint small">Phone</figcaption></figure>}
+          {r.shots?.desktop && <figure class="grow"><img class="desktop-shot" src={`${shotBase}/desktop`} alt={`${business} homepage on a computer`} loading="lazy" /><figcaption class="faint small">Computer</figcaption></figure>}
+        </div>
+      )}
+      {ran && d.visual.impression && <div class="design-impression mt"><strong>First impression</strong><p>{d.visual.impression}</p></div>}
+      {!ran && (
+        <div class="alert small mt">The visual design review wasn't run this time, so this section covers what we could check in the page's code and Google's tests.{staff && d.visual?.reason ? ` (${d.visual.reason})` : ''}</div>
+      )}
+      {(lh.mobile || lh.desktop) && (
+        <div class="grid two mt">
+          <Metric label="Accessibility on a phone" value={lh.mobile?.accessibility} suffix="/100" tone={tone(lh.mobile?.accessibility)} />
+          <Metric label="Best practices on a phone" value={lh.mobile?.bestPractices} suffix="/100" tone={tone(lh.mobile?.bestPractices)} />
+          <Metric label="Accessibility on a computer" value={lh.desktop?.accessibility} suffix="/100" tone={tone(lh.desktop?.accessibility)} />
+          <Metric label="Best practices on a computer" value={lh.desktop?.bestPractices} suffix="/100" tone={tone(lh.desktop?.bestPractices)} />
+        </div>
+      )}
+      {lh.failing?.length > 0 && (
+        <div class="mt">
+          <div class="small muted" style="margin-bottom:6px">Flagged by Google's tests</div>
+          <ul class="design-flags">
+            {lh.failing.map((a) => <li><span>{a.title}{a.value ? ` (${a.value})` : ''}</span><span class="faint small">{a.on.map((o) => (o === 'mobile' ? 'phone' : 'computer')).join(' and ')}</span></li>)}
+          </ul>
+        </div>
+      )}
+      <p class="faint small" style="margin-bottom:0">Design findings are listed with the others below, marked "Design and user experience".</p>
     </div>
   );
 }

@@ -58,6 +58,9 @@ export const RED_FLAGS = [
 export const RECOMMENDATIONS = [
   { when: { id: 'rank_check', in: ['not-found', 'page1', 'unknown'] }, services: ['seo', 'gbp'], weight: 3, because: 'Not in the top 3 on Google Maps for their main service.' },
   { when: { id: 'gbp_claimed', in: ['not-sure', 'no'] }, services: ['gbp', 'citations'], weight: 3, because: 'They don’t control their Google Business Profile.' },
+  { when: { id: 'gbp_exists', eq: false }, services: ['gbp', 'citations'], weight: 3, because: 'No Google Business Profile was found.' },
+  { when: { id: 'mobile_friendly', eq: false }, services: ['web'], weight: 3, because: 'The website doesn’t work well on phones.' },
+  { when: { id: 'speed_mobile', lte: 49 }, services: ['web'], weight: 2, because: 'Google rates the site slow on phones.' },
   { when: { id: 'ai_check', in: ['yes-not', 'no'] }, services: ['ai-search'], weight: 1, because: 'Not showing (or unchecked) in AI assistant recommendations.' },
   { when: { id: 'website_status', in: ['none', 'embarrassed'] }, services: ['web'], weight: 4, because: 'No website, or they are embarrassed by it.' },
   { when: { id: 'website_status', in: ['ok'] }, services: ['web'], weight: 1, because: 'Website is only “OK”; conversion improvements likely pay off.' },
@@ -67,8 +70,8 @@ export const RECOMMENDATIONS = [
   { when: { id: 'reviews_process', in: ['manual', 'no'] }, services: ['reputation'], weight: 3, because: 'No system for getting reviews.' },
   { when: { id: 'know_source', in: ['roughly', 'no'] }, services: ['analytics'], weight: 3, because: 'They don’t know which marketing produces customers.' },
   { when: { id: 'lead_sources', in: ['unknown'] }, services: ['analytics'], weight: 2, because: 'Lead sources unknown.' },
-  { when: { id: 'customer_list', in: ['500-2000', '2000+'] }, services: ['email-sms', 'referral'], weight: 3, because: 'Large past-customer list not being marketed to.' },
-  { when: { id: 'goal_type', in: ['repeat'] }, services: ['email-sms', 'referral'], weight: 2, because: 'Goal: more repeat business and referrals.' },
+  { when: { id: 'customer_list', in: ['500-2000', '2000+'] }, services: ['email', 'referral'], weight: 3, because: 'Large past-customer list not being marketed to.' },
+  { when: { id: 'goal_type', in: ['repeat'] }, services: ['email', 'sms', 'referral'], weight: 2, because: 'Goal: more repeat business and referrals.' },
   { when: { id: 'goal_type', in: ['more-leads'] }, services: ['ppc', 'seo'], weight: 2, because: 'Goal: more leads.' },
   { when: { id: 'goal_type', in: ['better-leads', 'higher-prices'] }, services: ['branding', 'web', 'content'], weight: 2, because: 'Goal: better customers and higher prices: positioning and proof.' },
   { when: { id: 'goal_type', in: ['brand'] }, services: ['branding', 'web', 'social'], weight: 2, because: 'Goal: look more professional than competitors.' },
@@ -149,7 +152,7 @@ export const OBJECTIONS = [
 export const INTAKE = {
   intro: 'A few quick questions so your Detcord strategist can come prepared. It takes about 3 minutes.',
   questions: [
-    q('website', 'Your website', 'text', { placeholder: 'www.example.com', optional: true, mapTo: null }),
+    q('website', 'Your website', 'text', { placeholder: 'www.example.com', optional: true, mapTo: 'website' }),
     q('top_services', 'Which services or products bring in the most money?', 'long', { mapTo: 'top_services' }),
     q('service_area', 'What towns or areas do you serve?', 'long', { mapTo: 'service_area' }),
     q('lead_sources', 'Where do new customers come from today?', 'multi', {

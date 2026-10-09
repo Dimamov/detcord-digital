@@ -6,6 +6,7 @@ import users from './routes/users.js';
 import clients from './routes/clients.js';
 import sales from './routes/sales.js';
 import discovery from './routes/discovery.js';
+import questionnaire from './routes/questionnaire.js';
 import home from './routes/home.js';
 import contracts from './routes/contracts.js';
 import billing from './routes/billing.js';
@@ -21,6 +22,7 @@ import industries from './routes/industries.js';
 import social from './routes/social.js';
 import reports from './routes/reports.js';
 import business from './routes/business.js';
+import proposals from './routes/proposals.js';
 
 const app = new Hono();
 
@@ -48,6 +50,7 @@ app.route('/api/users', users);
 app.route('/api/clients', clients);
 app.route('/api/sales', sales);
 app.route('/api', discovery);
+app.route('/api', questionnaire);
 app.route('/api', home);
 app.route('/api', contracts);
 app.route('/api', billing);
@@ -61,6 +64,7 @@ app.route('/api', industries);
 app.route('/api', social);
 app.route('/api', reports);
 app.route('/api', business);
+app.route('/api', proposals);
 
 app.all('/api/*', (c) => c.json({ error: 'Not found.' }, 404));
 

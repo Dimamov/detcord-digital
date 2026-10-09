@@ -8,6 +8,7 @@ import { cloverConfig, createCheckout, verifyCloverSignature, readCloverEvent } 
 import { getSettings, putSetting } from '../lib/settings.js';
 import { twilioConfig } from '../lib/sms.js';
 import { sendEmail, renderEmail } from '../lib/email.js';
+import { contractTotals } from '../../shared/contract.js';
 
 const r = new Hono();
 const DAY = 86400000;
@@ -99,6 +100,9 @@ r.post('/clients/:id/invoices', async (c) => {
     const d = JSON.parse(ct.data);
     lines = d.services.filter((s) => s.monthlyCents > 0).map((s) => ({ kind: 'monthly', description: `${s.name}: monthly`, unitCents: s.monthlyCents }));
     if (!lines.length) fail(400, 'That agreement has no monthly services.');
+    // A fixed-term discount is shown as its own credit line.
+    const totals = contractTotals(d);
+    if (totals.monthlyDiscount) lines.push({ kind: 'credit', description: `Term discount, ${totals.discountPct}%`, unitCents: -totals.monthlyDiscount });
     const month = text(body.period, { max: 40 }) || new Date().toLocaleString('en-US', { month: 'long', year: 'numeric', timeZone: 'America/Detroit' });
     title = `Monthly services: ${month}`; kind = 'monthly'; contractId = ct.id;
     lines = lines.map((l) => ({ ...l, description: `${l.description} (${month})` }));
@@ -296,6 +300,8 @@ r.put('/settings/company', async (c) => {
   for (const [k, max] of [['legalName', 160], ['address', 300], ['signer', 120], ['email', 160], ['phone', 40]]) {
     if (body[k] !== undefined) await putSetting(db, `company.${k}`, text(body[k], { max }) || '', user.id);
   }
+  // Michigan county named for disputes in the 2026-10 draft terms. Stored without the word "County".
+  if (body.venueCounty !== undefined) await putSetting(db, 'company.venueCounty', (text(body.venueCounty, { max: 60 }) || '').replace(/\s+county$/i, ''), user.id);
   return c.json({ company: await getSettings(db, 'company.') });
 });
 

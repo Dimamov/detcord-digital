@@ -58,7 +58,7 @@ secrets are set separately on the `detcord-portal` Worker; it never shares stagi
 | `GOOGLE_API_KEY` | website checks: Google PageSpeed and the Google Business Profile lookup (Places API (New)) | the speed test runs only within Google's shared quota; the Google profile check is skipped and the report says so |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_API_KEY_SID`, `TWILIO_API_KEY_SECRET`, `TWILIO_MESSAGING_SERVICE_SID` | texting website check reports and GOAT replies | Text says texting isn't set up; staff get the portal link to pass on |
 | `TWILIO_AUTH_TOKEN` | verifying incoming GOAT texts (Twilio signs webhooks with the auth token) | the text webhook answers 503 and no texts are accepted |
-| `ANTHROPIC_API_KEY` | Claude drafts a plan for each GOAT request and the monthly client reports | staff write every plan and report by hand |
+| `ANTHROPIC_API_KEY` | Claude drafts a plan for each GOAT request, the monthly client reports and proposals | staff write every plan, report and proposal by hand |
 | `GOOGLE_ADS_CLIENT_ID`, `GOOGLE_ADS_CLIENT_SECRET`, `GOOGLE_ADS_REFRESH_TOKEN` (`GOOGLE_ADS_DEVELOPER_TOKEN` optional; Google now grants access to the Cloud project) | link requests from Detcord's manager account (MCC 448-262-6468, override with `GOOGLE_ADS_MANAGER_ID`) to client Google Ads accounts; the refresh token belongs to a Google user who can manage the MCC | customer IDs are saved as "Waiting for Google Ads setup"; Settings sends them all once the keys are in |
 | `DEEPGRAM_API_KEY` | Transcribes recorded sales meetings (Claude then drafts the notes) | recordings are kept but not transcribed |
 | `ZERNIO_API_KEY` | social posting through Zernio: connecting client accounts and publishing approved posts | Social says posting isn't set up; posts can be written and approved but not published |
@@ -79,12 +79,45 @@ PageSpeed on mobile and desktop, and looks up the Google Business Profile and th
 scored findings in four areas (search visibility, local search and Google profile, mobile and customer experience, speed
 security and site health), each with what was found, why it matters, how to fix it, and the matching Detcord service.
 
+A fifth area, **Design and user experience**, is scored separately and left out of the overall score, so overall scores
+stay comparable with older checks. It combines checks the page's code proves (a call to action and tap-to-call link in
+the header or first section, a form on the homepage, form length, zoom-blocking or missing viewport settings, very small
+text in the page's own styles, menu size, trust signals such as licensed and insured or a guarantee), Google's
+accessibility and best-practices scores and failing design audits (tap targets, font sizes, contrast, image aspect,
+viewport) from both tests, and the phone and desktop screenshots. When `ANTHROPIC_API_KEY` is set, Claude reviews the
+two screenshots and a short summary of the page (title, H1, calls to action, menu) and adds a first impression and 3 to
+6 findings, told to describe only what is visible and never invent numbers. Those findings are labeled "from the visual
+review", can be hidden like any other, and are never scored. Without the key, or if Claude fails, the check still
+finishes and the report says the visual review wasn't run. The client's **Discovery** tab shows the latest check's
+scores and first impression.
+
 Staff can hide findings and add a note, then press **Email** or **Text**. The message carries a link into the
 customer's portal: the first time, a one-time password setup link (7 days) that creates their client login and opens the
 report; after that, a sign-in link to `/reports/<id>`. Customers only see checks that were sent to them. Texting requires
 confirming the customer agreed to it. If email or texting isn't connected, nothing is claimed as sent and staff get the
-link to pass on. The check stays within the free plan's 50 subrequests per request. For local testing against a site on your machine, run
+link to pass on. The check stays within the free plan's 50 subrequests per request: up to 40 for the crawl, 4 for
+Google and 1 for the design review (no retries). For local testing against a site on your machine, run
 `npx wrangler dev --env staging --var AUDIT_ALLOW_PRIVATE:1 --var AUDIT_SKIP_GOOGLE:1`; production refuses private addresses.
+
+## Discovery calls
+
+The rep runs the call from a client's **Discovery** tab with the guided script. Answers autosave one request at a time,
+and the server merges each save onto the latest stored answers, so overlapping saves never drop an answer.
+
+- **Prefilled answers.** A new discovery (and every reopen, so later forms and checks still land) fills empty questions
+  from the client record (name, website, city, industry), the latest submitted intake form, and the latest website
+  check (mobile and desktop speed scores, mobile setup, whether a Google profile was found, review count and rating).
+  Each shows "Prefilled from …" until the rep confirms or edits it. A prefill never replaces an answer the rep typed or cleared.
+- **Recap.** The last step, and a collapsible live panel on wide screens, lists every answer by section as the rep
+  types, with "Still to ask", the score preview and likely services. Any answer opens its question. **Copy recap** gives
+  plain text; **Send recap to client** drafts an email to copy (nothing is sent). The completed summary includes the recap.
+- **Client questionnaire.** **Invite client: report + questionnaire** (Discovery tab, or next to Email/Text on a website
+  check) emails or texts the client a portal link (password setup the first time) to `/questionnaire/<client>`, and
+  shares the latest website check with them. The questionnaire is an allowlist of client-appropriate questions
+  (`src/shared/discovery/questionnaire.js`); rep-only ones such as budget, competing quotes and contract terms are never
+  asked or writable there. Client answers fill the open discovery marked "Entered by the client"; once the rep has typed or
+  confirmed an answer, a different client answer only shows as a suggestion. Sending the answers gives the rep a task
+  and an email. The public pre-call intake link still works for prospects without a portal login.
 
 ## GOAT Command
 
@@ -165,6 +198,35 @@ Admins can draft last month's report for every active client from **Settings →
 clients per request (two with Claude, ten without) to stay inside Workers limits, shows progress, skips clients that
 already have a report for that month, and never shares anything.
 
+## Proposals
+
+Staff (admins, or the client's assigned rep) build a proposal from a client record (**Proposals** tab, or **Build a
+proposal** on the discovery results). The checklist shows the active catalog, checked from the latest discovery's
+recommended services (start with / next) and the client's recommended or proposed services. Each checked service has an
+editable one-time and monthly price (from the client record, else the catalog) and an optional scope line.
+
+1. **Generate:** the portal gathers this client's facts only: discovery answers (marked as the rep's notes, or the
+   client's own when prefilled from the pre-call form and left unchanged), the discovery result, pre-call answers,
+   meeting notes (summary, pain points, goals, the client's quotes; never transcripts or budgets) and the latest
+   website check (findings staff left visible). Money answers are left out. Claude (when `ANTHROPIC_API_KEY` is set)
+   writes the introduction and, per service, why we chose it, what we'll do, what it means for them, "what you told
+   us" with short quotes, and how it gets going, plus next steps. Every quote is checked against the facts word for
+   word; any that isn't there is removed and listed in the team notes. Claude never sees or writes prices: the
+   investment table and totals are computed by the server from the prices staff set. Without Claude, the draft starts
+   from the catalog descriptions, discovery reasons, website check findings and the client's pre-call answers.
+2. **Edit and share:** staff edit every section, the services and the prices. Every generated draft and every shared
+   version is kept (**Versions**). **Share** shows it to the client (home page and Business page, printable, "Save as
+   PDF") and can email their portal logins a link; without email set up nothing is claimed as sent and staff get the
+   link. A shared proposal can't be edited until staff **Unshare** it, which is logged; sharing again makes a new
+   version. Drafts, unshared proposals and other businesses' proposals get the same 404 as a missing one.
+3. **Client response:** the client presses **Accept proposal** or **Ask a question** (a note, kept on the proposal; the
+   reps get a task and an email). Only that business's logins can accept, only while it is shared, and only once.
+   Accepting records who and when, starts a draft agreement with exactly the proposal's services, prices and scope
+   lines (the same draft "New agreement" makes), and gives the assigned reps (or the admins) a task and an email. The
+   rep sets the term and deposit and sends it. Nothing is signed, invoiced or switched on by accepting.
+4. **Create agreement** on the proposal page starts the same draft by hand (for example when the client agreed by
+   phone); a proposal only ever starts one agreement.
+
 ## Agreements
 
 A new agreement starts from the client's selected services (the default), from an agreement template, or blank.
@@ -176,6 +238,19 @@ the note is logged, shown to staff on the agreement, and emailed to the client's
 up. The sent document never changes; staff use **Void and redraft**, which voids it with "Changes requested" and
 opens an editable copy. Reps can do that for sent agreements; voiding a signed one stays admin-only. The editor lists
 everything that blocks sending, each linked to the field (or to Settings → Company) that fixes it.
+
+**Term:** month to month (the default) or 3, 6, 9 or 12 months, with an optional term discount off monthly fees. The
+document and totals show the discount and the contract value for the term; monthly invoices from the agreement add
+the discount as a credit line. After a fixed term, services continue month to month with 30 days' notice.
+
+**Terms versions:** each agreement stores `termsVersion`. Every new agreement (including copies) uses **version
+2026-10**, the terms researched against Michigan and federal law (sources in `agreement-review-michigan.md` in the
+project files). Agreements created earlier keep **version 1**, whose text never changes (a test pins its hashes);
+a draft can be moved between versions under **Term** in the editor. Version 2026-10 names a Michigan county for
+disputes, set in **Settings → Company**, and sending is blocked until it is filled in. **Settings → Agreement
+templates** sets the early-termination rule for fixed terms (default: 50% of the remaining monthly fees); a sent
+agreement keeps the rule it was sent with. On version 1, a fixed term is added to Additional scope as a change to
+"Term and cancellation", with no early-termination fee.
 
 ## Client self-service
 

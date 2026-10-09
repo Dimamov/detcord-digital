@@ -25,7 +25,13 @@ export const LIGHTHOUSE_PICKS = {
   'document-title': 'seo',
   'is-crawlable': 'seo',
   'link-text': 'seo',
+  'image-aspect-ratio': 'design',
+  'image-size-responsive': 'design',
+  'viewport': 'design',
 };
+
+// Lighthouse audits shown in the design and user experience section, from both the phone and desktop tests.
+export const DESIGN_AUDITS = ['target-size', 'font-size', 'color-contrast', 'image-aspect-ratio', 'image-size-responsive', 'viewport', 'cumulative-layout-shift'];
 
 export async function pageSpeed(env, url, strategy) {
   const p = new URLSearchParams({ url, strategy });

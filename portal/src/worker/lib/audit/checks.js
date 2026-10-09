@@ -2,12 +2,15 @@
 // Every finding says what was found, why it matters, and how to fix it; nothing is reported that wasn't measured.
 import { digits10 } from './crawl.js';
 import { LIGHTHOUSE_PICKS } from './google.js';
+import { designChecks } from './design.js';
 
 export const CATEGORIES = [
   { id: 'seo', label: 'Search visibility', blurb: 'Whether Google can find, understand and rank your pages.' },
   { id: 'local', label: 'Local search and Google profile', blurb: 'How you show up when nearby customers search on Google and Maps.' },
   { id: 'ux', label: 'Mobile and customer experience', blurb: 'Whether visitors can easily read, trust and contact you, especially on phones.' },
   { id: 'tech', label: 'Speed, security and site health', blurb: 'Load speed, security and broken pages or links.' },
+  // Scored on its own and left out of the overall score, so overall scores stay comparable with checks run before it existed.
+  { id: 'design', label: 'Design and user experience', blurb: 'Whether the homepage looks trustworthy and makes the next step obvious.', separate: true },
 ];
 
 const WEIGHT = { critical: 25, important: 10, minor: 4 };
@@ -17,7 +20,7 @@ const fmtMs = (ms) => `${(ms / 1000).toFixed(1)} seconds`;
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const fmtPhone = (d) => (d && d.length === 10 ? `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}` : d);
 
-export function evaluate({ client, crawl, mobile, desktop, gbp, now = Date.now() }) {
+export function evaluate({ client, crawl, mobile, desktop, gbp, visual, now = Date.now() }) {
   const findings = [];
   const passed = [];
   const add = (f) => findings.push(f);
@@ -28,6 +31,8 @@ export function evaluate({ client, crawl, mobile, desktop, gbp, now = Date.now()
     pagespeedReason: mobile?.ok ? null : mobile?.reason || null,
     google: gbp?.ok ? 'checked' : 'skipped',
     googleReason: gbp?.ok ? null : gbp?.reason || null,
+    visual: visual?.ok ? 'checked' : 'skipped',
+    visualReason: visual?.ok ? null : visual?.reason || null,
   };
 
   if (!crawl.reachable) {
@@ -150,6 +155,11 @@ export function evaluate({ client, crawl, mobile, desktop, gbp, now = Date.now()
     const year = new Date(now).getUTCFullYear();
     if (home.copyrightYear && home.copyrightYear < year - 1) add({ id: 'stale', cat: 'ux', severity: 'minor', title: 'Your site looks out of date', detail: `The footer says © ${home.copyrightYear}.`, why: 'Visitors read an old date as a sign the business may not be active.', fix: 'Update the footer year (or make it automatic) and refresh old content.', service: 'hosting' });
     if (!home.favicon) add({ id: 'favicon', cat: 'ux', severity: 'minor', title: 'Your site has no browser icon', detail: 'We found no favicon.', why: 'The small logo in browser tabs and Google results makes your business look established.', fix: 'Add your logo as a favicon.', service: 'branding' });
+
+    // ---------- Design and user experience (from the page's code) ----------
+    const design = designChecks({ home, pages, reported: new Set(findings.map((f) => f.id)) });
+    design.findings.forEach(add);
+    design.passed.forEach((title) => ok('design', title));
   }
 
   // ---------- Speed, security and health ----------
@@ -189,25 +199,29 @@ export function evaluate({ client, crawl, mobile, desktop, gbp, now = Date.now()
     }
   }
 
+  // Claude's visual review: shown with the other findings, but never scored, so the same site always scores the same.
+  if (visual?.ok) visual.findings.forEach(add);
+
   // Avoid saying the same thing twice when Lighthouse and our own check agree.
   const seen = new Set(findings.map((f) => f.id));
-  const dropIf = { 'lh-image-alt': 'img-alt', 'lh-document-title': 'title-missing', 'lh-render-blocking-resources': 'blocking-scripts' };
-  const unique = findings.filter((f) => !(dropIf[f.id] && seen.has(dropIf[f.id])));
+  const dropIf = { 'lh-image-alt': ['img-alt'], 'lh-document-title': ['title-missing'], 'lh-render-blocking-resources': ['blocking-scripts'], 'lh-viewport': ['viewport', 'design-viewport-width'] };
+  const unique = findings.filter((f) => !dropIf[f.id]?.some((id) => seen.has(id)));
   unique.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] || CATEGORIES.findIndex((c) => c.id === a.cat) - CATEGORIES.findIndex((c) => c.id === b.cat));
 
   const scores = {};
   for (const c of CATEGORIES) {
-    const penalty = unique.filter((f) => f.cat === c.id).reduce((s, f) => s + WEIGHT[f.severity], 0);
+    const penalty = unique.filter((f) => f.cat === c.id && f.source !== 'visual').reduce((s, f) => s + WEIGHT[f.severity], 0);
     let score = Math.max(0, 100 - penalty);
     if (mobile?.ok) {
-      const lh = c.id === 'tech' ? avg([mobile.scores.performance, mobile.scores.bestPractices]) : c.id === 'ux' ? mobile.scores.accessibility : c.id === 'seo' ? mobile.scores.seo : null;
+      const lh = c.id === 'tech' ? avg([mobile.scores.performance, mobile.scores.bestPractices]) : c.id === 'ux' ? mobile.scores.accessibility : c.id === 'seo' ? mobile.scores.seo
+        : c.id === 'design' ? avg([mobile.scores.accessibility, mobile.scores.bestPractices]) : null;
       if (lh != null) score = Math.round(score * 0.6 + lh * 0.4);
     }
     if (!crawl.reachable && c.id !== 'local') score = c.id === 'tech' ? 0 : null;
     scores[c.id] = score;
   }
   if (!crawl.reachable && !gbp?.ok) scores.local = null;
-  const present = Object.values(scores).filter((v) => v != null);
+  const present = CATEGORIES.filter((c) => !c.separate).map((c) => scores[c.id]).filter((v) => v != null);
   const overall = present.length ? Math.round(present.reduce((s, v) => s + v, 0) / present.length) : 0;
 
   return {
@@ -255,6 +269,9 @@ const LH_WHY = {
   'document-title': 'The page has no title.',
   'is-crawlable': 'Google is blocked from indexing this page.',
   'link-text': 'Links like "click here" don\'t tell Google or visitors where they go.',
+  'image-aspect-ratio': 'Some photos are shown stretched or squashed, which makes the site look careless.',
+  'image-size-responsive': 'Some images are lower resolution than the space they fill, so they look blurry on sharp phone screens.',
+  'viewport': 'The page isn\'t set up to fit phone screens properly.',
 };
 const LH_FIX = {
   'cumulative-layout-shift': 'Set width and height on images, embeds and ads so space is reserved.',
@@ -267,4 +284,7 @@ const LH_FIX = {
   'font-size': 'Use at least 16px body text on mobile.',
   'target-size': 'Make tap targets at least 48 pixels with space between them.',
   'link-text': 'Use descriptive link text such as "See our drain cleaning services".',
+  'image-aspect-ratio': 'Show each photo at its natural proportions, or crop it to the shape it is displayed in.',
+  'image-size-responsive': 'Upload images at least twice the size they display at, and serve sizes to match the screen (srcset).',
+  'viewport': 'Add <meta name="viewport" content="width=device-width, initial-scale=1"> to every page.',
 };
