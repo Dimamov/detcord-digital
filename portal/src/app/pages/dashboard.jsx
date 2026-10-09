@@ -56,7 +56,6 @@ function StaffDay({ user }) {
         </div>
       </div>
 
-      {admin && <EmailFailures emails={data.emails} />}
       <Board page="staff-home" cards={[
         { id: 'stats', title: 'Numbers', col: 'top', node: (
       <div class="grid four mb">
@@ -189,29 +188,19 @@ function EmailLine({ e }) {
   );
 }
 
-// Email delivery only matters when something failed: failures from the last week get a banner at the top,
-// everything else is a one-line box at the bottom that opens into the list.
-function EmailFailures({ emails }) {
-  const failed = failedRecently(emails);
-  if (!failed.length) return null;
-  return (
-    <section class="card mb" style="border-color:var(--bad)">
-      <h2>{failed.length === 1 ? '1 email was not delivered' : `${failed.length} emails were not delivered`}</h2>
-      <div class="list">{failed.map((e) => <EmailLine e={e} key={e.id} />)}</div>
-    </section>
-  );
-}
-
+// Email delivery lives in a one-line box at the bottom. Failures from the last week turn its line red;
+// each failure also becomes a task for the rep and a note on the client record (lib/email.js).
 function EmailDelivery({ emails = [], ready }) {
   const count = (fn) => emails.filter(fn).length;
   const delivered = count((e) => e.status === 'delivered');
   const waiting = count((e) => !FAILED.includes(e.status) && e.status !== 'delivered');
   const failed = count((e) => FAILED.includes(e.status));
+  const recent = failedRecently(emails).length;
   return (
-    <details class="email-mini">
+    <details class={`email-mini${recent ? ' has-failures' : ''}`}>
       <summary>
         <Icon name="mail" size={14} />
-        <span>Email delivery</span>
+        <span>{recent ? `Email delivery: ${recent} not delivered this week` : 'Email delivery'}</span>
         <span class="faint">{emails.length ? `${delivered} delivered${waiting ? ` · ${waiting} waiting` : ''}${failed ? ` · ${failed} failed` : ''} · last ${ago(emails[0].created_at)}` : 'No emails yet'}{ready ? '' : ' · tracking not connected'}</span>
       </summary>
       {emails.length ? <div class="list">{emails.map((e) => <EmailLine e={e} key={e.id} />)}</div> : null}

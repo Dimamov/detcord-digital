@@ -619,7 +619,7 @@ function NotesTab({ data, user, reload }) {
       {data.notes.map((n) => (
         <section class="card">
           <div class="row between">
-            <div class="row"><Avatar name={n.author || '?'} /><div><strong>{n.author || 'Former user'}</strong><div class="small muted">{dateTime(n.created_at)}</div></div></div>
+            <div class="row"><Avatar name={n.author || (n.id.startsWith('email-fail/') ? 'Portal alert' : '?')} /><div><strong>{n.author || (n.id.startsWith('email-fail/') ? 'Portal alert' : 'Former user')}</strong><div class="small muted">{dateTime(n.created_at)}</div></div></div>
             <div class="row"><span class={`badge ${n.visibility === 'shared' ? 'accent' : ''}`}><Icon name={n.visibility === 'shared' ? 'eye' : 'lock'} size={12} />{n.visibility === 'shared' ? 'Client can see' : 'Internal'}</span>
               {(user.role === 'admin' || n.author_id === user.id) && <button class="icon-btn" aria-label="Delete note" onClick={() => del(n)}><Icon name="trash" size={14} /></button>}</div>
           </div>

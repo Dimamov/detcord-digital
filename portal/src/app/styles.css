@@ -393,6 +393,8 @@ tr.me td { background: var(--accent-soft); }
 .email-mini summary::-webkit-details-marker { display: none; }
 .email-mini[open] summary { border-bottom: 1px solid var(--line); }
 .email-mini .list { padding: 4px 12px 8px; }
+.email-mini.has-failures { border-color: var(--bad); }
+.email-mini.has-failures summary { color: var(--bad); font-weight: 600; }
 
 /* Phones: a little bigger and bolder text throughout */
 @media (max-width: 860px) {
