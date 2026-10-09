@@ -13,6 +13,7 @@ import { SocialTab } from './social.jsx';
 import { MeetingsTab } from './meetings.jsx';
 import { ReportsTab } from './reports.jsx';
 import { GoogleAdsCard } from './google-ads.jsx';
+import { ServiceRequestsCard } from './business.jsx';
 
 // ---------- List ----------
 export function ClientsList({ user }) {
@@ -233,6 +234,7 @@ function Overview({ data, user, reload }) {
   return (
     <div class="grid main-side">
       <div class="stack">
+        <ServiceRequestsCard clientId={c.id} />
         {latest && <ResultCard result={latest.result} discoveryId={latest.id} />}
         <ServicesCard data={data} reload={reload} />
         <section class="card">
@@ -632,18 +634,21 @@ function AccessTab({ data, user, reload }) {
     reload();
   });
   const resend = (u) => run(async () => { setResult(await api('POST', `/users/${u.id}/invite`, {})); reload(); });
+  const setOwner = (u, owner) => run(async () => { await api('PATCH', `/clients/${data.client.id}/members/${u.id}`, { owner }); reload(); });
   const state = (u) => u.status === 'active' ? ['Active', 'good'] : u.status === 'disabled' ? ['Disabled', ''] : u.invite_expires < Date.now() ? ['Invite expired', 'warn'] : u.invite_delivery === 'sent' ? ['Invite sent', 'info'] : ['Not delivered', 'warn'];
   return (
     <section class="card">
       <div class="card-head"><h2>Client portal logins</h2><button class="btn sm" onClick={() => setF({ name: '', email: '' })}><Icon name="plus" size={14} />Invite</button></div>
-      <p class="muted small" style="margin-top:0">People at {data.client.name} who can sign in. They see only this business, shared notes and active services.</p>
+      <p class="muted small" style="margin-top:0">People at {data.client.name} who can sign in. They see only this business, shared notes and active services. Owners can invite and remove their own teammates from the Business page.</p>
       {data.logins.length ? data.logins.map((u) => {
         const [l, tone] = state(u);
         return (
           <div class="row" style="padding:8px 0;border-bottom:1px solid var(--line)">
             <Avatar name={u.name} />
             <div style="flex:1;min-width:0"><div style="font-weight:600">{u.name}</div><div class="small muted">{u.email}{u.last_login_at ? ` · last sign-in ${ago(u.last_login_at)}` : ''}</div></div>
+            {u.is_owner ? <span class="badge accent">Owner</span> : null}
             <span class={`badge ${tone}`}>{l}</span>
+            <button class="btn sm ghost" disabled={busy} onClick={() => setOwner(u, !u.is_owner)}>{u.is_owner ? 'Remove owner' : 'Make owner'}</button>
             {u.status === 'invited' && <button class="btn sm secondary" disabled={busy} onClick={() => resend(u)}>Resend</button>}
           </div>
         );

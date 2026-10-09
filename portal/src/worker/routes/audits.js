@@ -1,7 +1,7 @@
 // Website and local search audits: run, review, and send the customer an email or text that opens the report in their portal.
 import { Hono } from 'hono';
 import { fail, now, newId, text, oneOf, readJson, logActivity, cleanEmail } from '../lib/util.js';
-import { requireRole, requireClient, requireUser, isStaff, issueLink } from '../lib/auth.js';
+import { requireRole, requireClient, requireUser, isStaff, issueLink, addMember } from '../lib/auth.js';
 import { runAudit, checkTarget, CATEGORIES } from '../lib/audit/index.js';
 import { sendEmail, renderEmail } from '../lib/email.js';
 import { sendSms, toE164, twilioConfig, testTwilio } from '../lib/sms.js';
@@ -142,7 +142,7 @@ async function portalLink(c, client, auditId, { name, email, phone }) {
     user = { id: newId(), email, name, role: 'client', status: 'invited' };
     await db.batch([
       db.prepare("INSERT INTO users (id, email, name, role, status, phone, created_at) VALUES (?,?,?,'client','invited',?,?)").bind(user.id, email, name, phone || null, now()),
-      db.prepare('INSERT INTO client_members (client_id, user_id) VALUES (?,?)').bind(client.id, user.id),
+      addMember(db, client.id, user.id),
     ]);
     await logActivity(db, { clientId: client.id, actorId: requireUser(c).id, kind: 'invite', summary: `Created a portal login for ${name} to view a website check` });
   }

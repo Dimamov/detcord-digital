@@ -1,7 +1,7 @@
 // Team and account management (admin only), plus client-login invites (admin or assigned rep).
 import { Hono } from 'hono';
 import { fail, now, newId, cleanEmail, text, oneOf, readJson, logActivity } from '../lib/util.js';
-import { requireRole, requireClient, issueLink } from '../lib/auth.js';
+import { requireRole, requireClient, issueLink, addMember } from '../lib/auth.js';
 
 const r = new Hono();
 
@@ -53,7 +53,7 @@ r.post('/', async (c) => {
   const user = { id: newId(), email, name, role };
   const stmts = [db.prepare("INSERT INTO users (id, email, name, role, status, phone, created_at) VALUES (?,?,?,?,'invited',?,?)")
     .bind(user.id, email, name, role, text(body.phone, { max: 40 }), now())];
-  if (clientId) stmts.push(db.prepare('INSERT INTO client_members (client_id, user_id) VALUES (?,?)').bind(clientId, user.id));
+  if (clientId) stmts.push(addMember(db, clientId, user.id));
   await db.batch(stmts);
   const link = await issueLink(c, user, 'invite');
   await logActivity(db, { clientId, actorId: actor.id, kind: 'invite', summary: `Invited ${name} (${role})` });
