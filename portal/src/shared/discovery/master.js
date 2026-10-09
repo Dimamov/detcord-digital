@@ -16,6 +16,10 @@ export const MASTER = {
         "Before we start, is there anything specific that made you take this call today?",
       ],
       questions: [
+        // The basics the portal already has on file. Prefilled; the rep confirms them at the start of the call.
+        q('business_name', 'Business name', 'text', { optional: true, hint: 'Confirm the name customers know them by, if it differs from the legal name.' }),
+        q('website', 'Website', 'text', { optional: true, placeholder: 'www.example.com' }),
+        q('city', 'City', 'text', { optional: true, placeholder: 'e.g. Troy, MI' }),
         q('trigger', 'What made you take this call now?', 'long', { hint: 'The trigger event is the real reason they are talking to you. Write it in their words; you will repeat it back at the close.' }),
         q('attendees_dm', 'Is everyone who would make a decision about marketing on this call?', 'single', {
           options: opts('yes|Yes, the decision maker is here', 'partner|A partner or spouse also decides', 'other|Someone else decides'),
@@ -105,8 +109,12 @@ export const MASTER = {
           options: opts('none|We don’t have one', 'embarrassed|Embarrassed by it', 'ok|It’s OK', 'good|It works well'),
         }),
         q('website_age', 'When was the website built or last redesigned, and who can update it?', 'text', { showIf: { id: 'website_status', notIn: ['none'] } }),
+        q('gbp_exists', 'Does the business have a Google Business Profile?', 'yesno', { optional: true, hint: 'The website check looks this up. If it found none, confirm on the call.' }),
         q('gbp_claimed', 'Do you control your Google Business Profile?', 'single', { options: opts('yes|Yes', 'not-sure|Not sure who has access', 'no|No / don’t have one') }),
         q('reviews_count', 'How many Google reviews do you have, and what is the rating?', 'text', { hint: 'Look it up live. Compare with the top 3 competitors in the map pack.' }),
+        q('speed_mobile', 'Google mobile speed score (0–100)', 'number', { optional: true, placeholder: '0–100', hint: 'From the website check (Google PageSpeed). Under 50 is slow; most visitors are on phones.' }),
+        q('speed_desktop', 'Google desktop speed score (0–100)', 'number', { optional: true, placeholder: '0–100' }),
+        q('mobile_friendly', 'Does the website work well on a phone?', 'yesno', { optional: true, hint: 'Open it on your phone while you talk. The website check tests the mobile setup.' }),
         q('reviews_process', 'Do you have a system for asking happy customers for reviews?', 'single', { options: opts('auto|Yes, automated', 'manual|We ask sometimes', 'no|No') }),
         q('rank_check', 'When someone searches "[your main service] near me" in your town, where do you show up?', 'single', {
           options: opts('top3|Top 3 on the map', 'page1|Page 1 but not top 3', 'not-found|Can’t find us', 'unknown|Don’t know'),

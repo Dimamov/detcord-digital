@@ -1,76 +1,145 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { useLoad, api, toast, navigate, ago } from '../lib.js';
-import { Loading, ErrorBox, Icon, Chips, Dialog, useAction } from '../ui.jsx';
-import { buildSections, progress, computeResult } from '../../shared/discovery/engine.js';
+import { Loading, ErrorBox, Icon, Chips, Dialog, CopyButton, useAction } from '../ui.jsx';
+import { buildSections, computeResult } from '../../shared/discovery/engine.js';
 import { visible } from '../../shared/discovery/schema.js';
+import { buildRecap, recapText, recapEmail, answered, SOURCE_LABEL } from '../../shared/discovery/recap.js';
 import { industryById } from '../../shared/discovery/industries.js';
 import { SERVICES, serviceById } from '../../shared/services.js';
 import { ResultCard } from './clients.jsx';
 import { IndustrySelect, industryName } from '../industries.jsx';
 
-const answered = (v) => v !== undefined && v !== null && v !== '' && !(Array.isArray(v) && !v.length);
+const shortTitle = (t) => t.replace(/: (industry questions|scoping)$/, '');
 
-export function DiscoveryRunner({ id }) {
-  const { loading, data, error, reload } = useLoad(`/discoveries/${id}`);
-  if (loading) return <div class="page"><Loading /></div>;
-  if (error) return <div class="page"><ErrorBox error={error} retry={reload} /></div>;
-  return <Runner initial={data.discovery} client={data.client} />;
+// Merges body fields that weren't saved yet: lists add up, single values take the newer one.
+function mergeExtra(older, newer) {
+  const out = { ...older, ...newer };
+  for (const k of ['confirm', 'dismiss']) if (older[k] || newer[k]) out[k] = [...(older[k] || []), ...(newer[k] || [])];
+  return out;
 }
 
-function Runner({ initial, client }) {
-  const [answers, setAnswers] = useState(initial.answers);
-  const [industry, setIndustry] = useState(initial.industry);
-  const [modules, setModules] = useState(initial.modules);
-  const [status, setStatus] = useState(initial.status);
-  const [finalResult, setFinalResult] = useState(initial.result);
-  const [step, setStep] = useState(0);
-  const [save, setSave] = useState({ state: 'saved', at: initial.updated_at });
-  const [picker, setPicker] = useState(false);
+// Autosave queue: one request at a time, each sending whatever changed since the last, so saves never overlap
+// or land out of order. Anything that fails goes back in the queue underneath what was typed since.
+export function useAutosave(save, initialAt) {
   const pending = useRef({});
+  const extra = useRef({});
+  const chain = useRef(Promise.resolve());
   const timer = useRef();
-  const { busy, error, run } = useAction();
-
-  const sections = useMemo(() => buildSections(industry, modules), [industry, modules]);
-  const preview = useMemo(() => computeResult(answers, industry), [answers, industry]);
-  const prog = progress(sections, answers);
-  const section = sections[Math.min(step, sections.length - 1)];
-
-  const flush = async (extra = {}) => {
-    clearTimeout(timer.current);
-    const body = { answers: pending.current, ...extra };
+  const [status, setStatus] = useState({ state: 'saved', at: initialAt });
+  const dirty = () => Object.keys(pending.current).length > 0 || Object.keys(extra.current).length > 0;
+  const send = async () => {
+    if (!dirty()) return;
+    const body = { answers: pending.current, ...extra.current };
+    const sentExtra = extra.current;
     pending.current = {};
-    setSave({ state: 'saving' });
+    extra.current = {};
+    setStatus({ state: 'saving' });
     try {
-      await api('PATCH', `/discoveries/${initial.id}`, body);
-      setSave({ state: 'saved', at: Date.now() });
+      const r = await save(body);
+      setStatus(dirty() ? { state: 'pending' } : { state: 'saved', at: Date.now() });
+      return r;
     } catch (e) {
-      Object.assign(pending.current, body.answers);
-      setSave({ state: 'error', message: e.message });
+      pending.current = { ...body.answers, ...pending.current };
+      extra.current = mergeExtra(sentExtra, extra.current);
+      setStatus({ state: 'error', message: e.message });
+      return false;
     }
   };
-  const setAnswer = (qid, v) => {
-    setAnswers((a) => ({ ...a, [qid]: v }));
-    pending.current[qid] = v;
-    setSave({ state: 'pending' });
+  const flush = () => { clearTimeout(timer.current); return (chain.current = chain.current.then(send)); };
+  const queue = (answers = {}, more = null) => {
+    Object.assign(pending.current, answers);
+    if (more) { extra.current = mergeExtra(extra.current, more); return flush(); }
+    setStatus({ state: 'pending' });
     clearTimeout(timer.current);
     timer.current = setTimeout(flush, 800);
   };
   // Save before leaving the page.
   useEffect(() => {
-    const warn = (e) => { if (Object.keys(pending.current).length) { flush(); e.preventDefault(); } };
+    const warn = (e) => { if (dirty()) { flush(); e.preventDefault(); } };
     addEventListener('beforeunload', warn);
-    return () => { removeEventListener('beforeunload', warn); if (Object.keys(pending.current).length) flush(); };
+    return () => { removeEventListener('beforeunload', warn); if (dirty()) flush(); };
   }, []);
+  return { status, queue, flush };
+}
+
+export function SaveStatus({ save, retry }) {
+  if (save.state === 'saving') return 'Saving…';
+  if (save.state === 'pending') return 'Unsaved changes';
+  if (save.state === 'error') return <span class="overdue">Not saved: {save.message} <button class="btn sm ghost" onClick={retry}>Retry</button></span>;
+  return `Saved ${ago(save.at)}`;
+}
+
+export function DiscoveryRunner({ id }) {
+  const { loading, data, error, reload } = useLoad(`/discoveries/${id}`);
+  if (loading) return <div class="page"><Loading /></div>;
+  if (error) return <div class="page"><ErrorBox error={error} retry={reload} /></div>;
+  return <Runner initial={data.discovery} client={data.client} names={data.names} />;
+}
+
+function Runner({ initial, client, names }) {
+  const [answers, setAnswers] = useState(initial.answers);
+  const [marks, setMarks] = useState(initial.marks || {});
+  const [suggestions, setSuggestions] = useState(initial.suggestions || {});
+  const [industry, setIndustry] = useState(initial.industry);
+  const [modules, setModules] = useState(initial.modules);
+  const [status, setStatus] = useState(initial.status);
+  const [finalResult, setFinalResult] = useState(initial.result);
+  const [step, setStep] = useState(0);
+  const [picker, setPicker] = useState(false);
+  const [livePanel, setLivePanel] = useState(() => { try { return localStorage.getItem('dp-live-recap') !== 'closed'; } catch { return true; } });
+  const focusId = useRef(null);
+  const [jumped, setJumped] = useState(0);
+  const { busy, error, run } = useAction();
+  const { status: save, queue, flush } = useAutosave((body) => api('PATCH', `/discoveries/${initial.id}`, body), initial.updated_at);
+
+  const sections = useMemo(() => buildSections(industry, modules), [industry, modules]);
+  const preview = useMemo(() => computeResult(answers, industry), [answers, industry]);
+  // The recap is built from what is on screen, not from the last save, so it updates as the rep types.
+  const recap = useMemo(() => buildRecap({ industry, modules, answers, marks, suggestions }), [industry, modules, answers, marks, suggestions]);
+  const prog = recap.progress;
+  const recapStep = sections.length; // the last step, after every section
+  const onRecap = step >= recapStep;
+  const section = sections[Math.min(step, sections.length - 1)];
+
+  const unmark = (ids) => {
+    setMarks((m) => { const n = { ...m }; for (const i of ids) delete n[i]; return n; });
+    setSuggestions((m) => { const n = { ...m }; for (const i of ids) delete n[i]; return n; });
+  };
+  // The rep's edits always win: they clear the prefill or client marker on that question.
+  const setAnswer = (qid, v) => {
+    setAnswers((a) => ({ ...a, [qid]: v }));
+    unmark([qid]);
+    queue({ [qid]: v });
+  };
+  const confirm = (qid) => { unmark([qid]); queue({}, { confirm: [qid] }); };
+  const confirmAll = () => { const ids = Object.keys(marks); unmark(ids); queue({}, { confirm: ids }); toast(`Confirmed ${ids.length} answer${ids.length === 1 ? '' : 's'}.`); };
+  const useSuggestion = (qid) => setAnswer(qid, suggestions[qid].value);
+  const dismiss = (qid) => { setSuggestions((m) => { const n = { ...m }; delete n[qid]; return n; }); queue({}, { dismiss: [qid] }); };
 
   const go = (i) => { setStep(i); scrollTo({ top: 0, behavior: 'smooth' }); };
-  const changeIndustry = (v) => { setIndustry(v || null); flush({ industry: v || null }); };
+  // Jump from the recap back to one question, scrolled into view and focused.
+  const jump = (i, qid) => { focusId.current = qid; setStep(i); setStatus((s) => (s === 'complete' ? 'in_progress' : s)); setJumped((n) => n + 1); };
+  useEffect(() => {
+    const qid = focusId.current;
+    if (!qid) return;
+    focusId.current = null;
+    const el = document.getElementById(`q-${qid}`);
+    if (!el) return;
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    el.classList.add('flash');
+    setTimeout(() => el.classList.remove('flash'), 1600);
+    el.querySelector('input,textarea,button')?.focus({ preventScroll: true });
+  }, [jumped]);
+  const toggleLive = () => { const v = !livePanel; setLivePanel(v); try { localStorage.setItem('dp-live-recap', v ? 'open' : 'closed'); } catch {} };
+
+  const changeIndustry = (v) => { setIndustry(v || null); unmark(['industry']); queue({}, { industry: v || null }); };
   const toggleModule = (sid) => {
     const next = modules.includes(sid) ? modules.filter((m) => m !== sid) : [...modules, sid];
     setModules(next);
-    flush({ modules: next });
+    queue({}, { modules: next });
   };
   const complete = () => run(async () => {
-    await flush();
+    if ((await flush()) === false) throw new Error('Some answers didn\'t save. Retry the save, then finish.');
     const r = await api('POST', `/discoveries/${initial.id}/complete`, {});
     setFinalResult(r.result);
     setStatus('complete');
@@ -78,12 +147,14 @@ function Runner({ initial, client }) {
     scrollTo({ top: 0 });
   });
 
+  const recapProps = { recap, result: finalResult && status === 'complete' ? finalResult : preview, business: client.name, answers, names };
   if (status === 'complete' && finalResult) {
-    return <Summary result={finalResult} client={client} onEdit={() => setStatus('in_progress')} />;
+    return <Summary result={finalResult} client={client} recapProps={recapProps} onJump={jump} onEdit={() => setStatus('in_progress')} />;
   }
 
   const sectionDone = (s) => s.questions.filter((q) => !q.optional && visible(q, answers)).every((q) => answered(answers[q.id]));
   const ind = industryById[industry];
+  const unconfirmed = Object.keys(marks).length;
 
   return (
     <div class="page" style="max-width:1320px">
@@ -91,10 +162,11 @@ function Runner({ initial, client }) {
         <div>
           <a class="small muted" href={`/clients/${client.id}?tab=discovery`}>← {client.name}</a>
           <h1>Discovery call</h1>
-          <div class="row mt small muted">
+          <div class="row wrap mt small muted">
             <span>{prog.done} of {prog.total} answered</span>
+            {unconfirmed > 0 && <><span>·</span><button class="linkish" onClick={() => go(recapStep)}>{unconfirmed} prefilled to confirm</button></>}
             <span>·</span>
-            <span role="status">{save.state === 'saving' ? 'Saving…' : save.state === 'pending' ? 'Unsaved changes' : save.state === 'error' ? <span class="overdue">Not saved: {save.message} <button class="btn sm ghost" onClick={() => flush()}>Retry</button></span> : `Saved ${ago(save.at)}`}</span>
+            <span role="status"><SaveStatus save={save} retry={() => flush()} /></span>
           </div>
         </div>
         <div class="row">
@@ -110,40 +182,74 @@ function Runner({ initial, client }) {
           {sections.map((s, i) => (
             <button aria-current={i === step ? 'step' : undefined} onClick={() => go(i)}>
               <span class={`dot ${sectionDone(s) ? 'done' : ''}`} />
-              <span style="flex:1">{s.title.replace(/: (industry questions|scoping)$/, '')}</span>
+              <span style="flex:1">{shortTitle(s.title)}</span>
               {s.minutes && <span class="faint small">{s.minutes}m</span>}
             </button>
           ))}
+          <button aria-current={onRecap ? 'step' : undefined} onClick={() => go(recapStep)}>
+            <Icon name="doc" size={14} /><span style="flex:1">Recap</span>
+            {recap.missing.length > 0 && <span class="faint small">{recap.missing.length} to ask</span>}
+          </button>
           <button onClick={() => setPicker(true)} style="color:var(--accent-2)"><Icon name="plus" size={14} />Add service questions</button>
         </nav>
 
-        <main class="card" style="min-width:0">
-          <div class="row between">
-            <div class="eyebrow" style="margin:0">{section.kind === 'industry' ? 'Industry' : section.kind === 'service' ? 'Service scoping' : `Step ${step + 1} of ${sections.length}`}</div>
-            {section.kind === 'service' && <button class="btn sm ghost" onClick={() => { toggleModule(section.id.split(':')[1]); go(Math.max(0, step - 1)); }}>Remove</button>}
-          </div>
-          <h2 style="font-size:22px;margin:4px 0 14px">{section.title}</h2>
+        {onRecap ? (
+          <main class="card" style="min-width:0">
+            <div class="eyebrow" style="margin:0">End of call</div>
+            <h2 style="font-size:22px;margin:4px 0 6px">Recap</h2>
+            <div class="script"><strong>Say</strong>"Let me read back what I heard so I get it right." Then confirm anything marked prefilled or entered by the client, and ask what's still open.</div>
+            <RecapActions {...recapProps} />
+            <ScorePreview result={preview} />
+            <Recap recap={recap} onJump={jump} onConfirm={confirm} onConfirmAll={confirmAll} onUse={useSuggestion} onDismiss={dismiss} />
+            <div class="row between mt">
+              <button class="btn secondary" onClick={() => go(recapStep - 1)}><Icon name="back" />Back</button>
+              <button class="btn" onClick={complete} disabled={busy}>{busy ? 'Scoring…' : 'Finish and score'}</button>
+            </div>
+          </main>
+        ) : (
+          <main class="card" style="min-width:0">
+            <div class="row between">
+              <div class="eyebrow" style="margin:0">{section.kind === 'industry' ? 'Industry' : section.kind === 'service' ? 'Service scoping' : `Step ${step + 1} of ${sections.length}`}</div>
+              {section.kind === 'service' && <button class="btn sm ghost" onClick={() => { toggleModule(section.id.split(':')[1]); go(Math.max(0, step - 1)); }}>Remove</button>}
+            </div>
+            <h2 style="font-size:22px;margin:4px 0 14px">{section.title}</h2>
 
-          {section.id === 'open' && (
-            <div class="field mb"><span>Industry</span><IndustrySelect value={industry} onChange={changeIndustry} /></div>
-          )}
-          {(section.script || []).map((s) => <div class="script"><strong>Say</strong>{s}</div>)}
-          {section.listenFor && <div class="script"><strong>Listen for</strong>{section.listenFor.map((l) => <div>• {l}</div>)}</div>}
-          {section.michigan && <div class="script"><strong>Michigan angle</strong>{section.michigan}</div>}
+            {section.id === 'open' && (
+              <div class="field mb">
+                <span>Industry</span>
+                <IndustrySelect value={industry} onChange={changeIndustry} />
+                {marks.industry && <MarkLine mark={marks.industry} onConfirm={() => confirm('industry')} />}
+              </div>
+            )}
+            {(section.script || []).map((s) => <div class="script"><strong>Say</strong>{s}</div>)}
+            {section.listenFor && <div class="script"><strong>Listen for</strong>{section.listenFor.map((l) => <div>• {l}</div>)}</div>}
+            {section.michigan && <div class="script"><strong>Michigan angle</strong>{section.michigan}</div>}
 
-          {section.questions.filter((q) => visible(q, answers)).map((q) => (
-            <Question q={q} value={answers[q.id]} onChange={(v) => setAnswer(q.id, v)} />
-          ))}
+            {section.questions.filter((q) => visible(q, answers)).map((q) => (
+              <Question q={q} value={answers[q.id]} onChange={(v) => setAnswer(q.id, v)}
+                mark={marks[q.id]} onConfirm={() => confirm(q.id)}
+                suggestion={suggestions[q.id]} onUse={() => useSuggestion(q.id)} onDismiss={() => dismiss(q.id)} />
+            ))}
 
-          <div class="row between mt">
-            <button class="btn secondary" disabled={step === 0} onClick={() => go(step - 1)}><Icon name="back" />Back</button>
-            {step < sections.length - 1
-              ? <button class="btn" onClick={() => go(step + 1)}>Next: {sections[step + 1].title.replace(/: (industry questions|scoping)$/, '')}<Icon name="arrow" /></button>
-              : <button class="btn" onClick={complete} disabled={busy}>Finish and score</button>}
-          </div>
-        </main>
+            <div class="row between mt">
+              <button class="btn secondary" disabled={step === 0} onClick={() => go(step - 1)}><Icon name="back" />Back</button>
+              {step < sections.length - 1
+                ? <button class="btn" onClick={() => go(step + 1)}>Next: {shortTitle(sections[step + 1].title)}<Icon name="arrow" /></button>
+                : <button class="btn" onClick={() => go(recapStep)}>Next: Recap<Icon name="arrow" /></button>}
+            </div>
+          </main>
+        )}
 
         <aside class="side stack">
+          {!onRecap && (
+            <section class="card live-recap">
+              <button class="panel-toggle" aria-expanded={livePanel} onClick={toggleLive}>
+                <h3 style="margin:0">Live recap</h3>
+                <span class="faint small">{livePanel ? 'Hide' : `Show · ${prog.done} answered`}</span>
+              </button>
+              {livePanel && <LiveRecap recap={recap} onJump={jump} onOpen={() => go(recapStep)} />}
+            </section>
+          )}
           <section class="card">
             <div class="row" style="gap:12px">
               <span class={`grade ${preview.score.grade}`}>{preview.score.grade}</span>
@@ -183,11 +289,33 @@ function Runner({ initial, client }) {
   );
 }
 
-function Question({ q, value, onChange }) {
+// "Prefilled from website check · 2h ago  [Confirm]": shown until the rep confirms or edits the answer.
+function MarkLine({ mark, onConfirm }) {
   return (
-    <div class="question">
-      <div class="qtext">{q.q}{q.optional && <span class="faint small"> · optional</span>}</div>
+    <div class="mark-line">
+      <span class={`badge ${mark.source === 'client' ? 'accent' : 'info'}`}>{SOURCE_LABEL[mark.source] || 'Prefilled'}</span>
+      {mark.at && <span class="faint small">{ago(mark.at)}</span>}
+      {onConfirm && <button class="btn sm ghost" onClick={onConfirm}><Icon name="check" size={14} />Confirm</button>}
+    </div>
+  );
+}
+
+function SuggestionLine({ text, at, onUse, onDismiss }) {
+  return (
+    <div class="alert info small mark-line" style="margin:8px 0 0">
+      <span style="flex:1;min-width:0"><strong>The client answered differently{at ? ` ${ago(at)}` : ''}:</strong> {text}</span>
+      {onUse && <button class="btn sm secondary" onClick={onUse}>Use theirs</button>}
+      {onDismiss && <button class="btn sm ghost" onClick={onDismiss}>Keep mine</button>}
+    </div>
+  );
+}
+
+export function Question({ q, value, onChange, mark, onConfirm, suggestion, onUse, onDismiss, hideOptional = false }) {
+  return (
+    <div class={`question${mark ? ' marked' : ''}`} id={`q-${q.id}`}>
+      <div class="qtext">{q.q}{q.optional && !hideOptional && <span class="faint small"> · optional</span>}</div>
       {q.hint && <div class="hint">{q.hint}</div>}
+      {mark && <MarkLine mark={mark} onConfirm={onConfirm} />}
       {q.type === 'single' && <Chips options={q.options} value={value} onChange={onChange} />}
       {q.type === 'multi' && <Chips options={q.options} multi value={value} onChange={onChange} />}
       {q.type === 'yesno' && <Chips options={[{ v: true, l: 'Yes' }, { v: false, l: 'No' }]} value={value} onChange={onChange} />}
@@ -202,11 +330,119 @@ function Question({ q, value, onChange }) {
           <input class="input" inputMode="decimal" value={value ?? ''} placeholder={q.placeholder || ''} onInput={(e) => { const v = e.target.value.replace(/[^0-9.]/g, ''); onChange(v === '' ? null : Number(v)); }} />
         </div>
       )}
+      {suggestion && <SuggestionLine text={suggestion.text ?? String(suggestion.value)} at={suggestion.at} onUse={onUse} onDismiss={onDismiss} />}
     </div>
   );
 }
 
-function Summary({ result, client, onEdit }) {
+// Compact recap for the side panel: every answer so far, click to jump back to it.
+function LiveRecap({ recap, onJump, onOpen }) {
+  if (!recap.sections.length) return <p class="small muted" style="margin:8px 0 0">Answers appear here as you type them.</p>;
+  return (
+    <div class="live-list">
+      {recap.sections.map((s) => (
+        <div>
+          <div class="eyebrow" style="margin:10px 0 2px">{s.title}</div>
+          {s.items.map((i) => (
+            <button class="recap-item" onClick={() => onJump(s.step, i.id)} title="Edit this answer">
+              <span class="faint small">{i.q}</span>
+              <span class="small">{i.text}{i.mark && <span class="badge info" style="margin-left:6px">{i.mark.source === 'client' ? 'client' : 'prefilled'}</span>}</span>
+            </button>
+          ))}
+        </div>
+      ))}
+      <button class="btn sm secondary block mt" onClick={onOpen}>Open full recap{recap.missing.length ? ` · ${recap.missing.length} still to ask` : ''}</button>
+    </div>
+  );
+}
+
+// The full recap: answers grouped by section, what's still to ask, and markers to confirm.
+export function Recap({ recap, onJump, onConfirm, onConfirmAll, onUse, onDismiss }) {
+  return (
+    <div class="recap">
+      {recap.unconfirmed > 0 && onConfirmAll && (
+        <div class="alert info row between wrap mb">
+          <span>{recap.unconfirmed} answer{recap.unconfirmed === 1 ? ' was' : 's were'} prefilled or entered by the client. Read them back, then confirm.</span>
+          <button class="btn sm secondary" onClick={onConfirmAll}><Icon name="check" size={14} />Confirm all</button>
+        </div>
+      )}
+      {recap.sections.map((s) => (
+        <section class="recap-section">
+          <h3>{s.title}</h3>
+          {s.items.map((i) => (
+            <div class="recap-row">
+              <button class="recap-item" onClick={() => onJump(s.step, i.id)} title="Edit this answer">
+                <span class="faint small">{i.q}</span>
+                <span class="recap-answer">{i.text}</span>
+              </button>
+              {i.mark && <MarkLine mark={i.mark} onConfirm={onConfirm ? () => onConfirm(i.id) : null} />}
+              {i.suggestion && <SuggestionLine text={i.suggestion.text} at={i.suggestion.at} onUse={onUse ? () => onUse(i.id) : null} onDismiss={onDismiss ? () => onDismiss(i.id) : null} />}
+            </div>
+          ))}
+        </section>
+      ))}
+      {!recap.sections.length && <p class="muted">Nothing answered yet.</p>}
+      {recap.missing.length > 0 && <StillToAsk missing={recap.missing} onJump={onJump} />}
+
+    </div>
+  );
+}
+
+// Required questions not answered yet, grouped by section. A long list starts collapsed so the answers come first.
+function StillToAsk({ missing, onJump }) {
+  const groups = [];
+  for (const m of missing) {
+    const g = groups.at(-1);
+    if (g && g.step === m.step) g.items.push(m);
+    else groups.push({ step: m.step, section: m.section, items: [m] });
+  }
+  return (
+    <details class="recap-section" open={missing.length <= 12}>
+      <summary><h3 style="display:inline-flex">Still to ask <span class="badge warn">{missing.length}</span></h3></summary>
+      {groups.map((g) => (
+        <div>
+          <div class="eyebrow" style="margin:10px 0 2px">{g.section}</div>
+          {g.items.map((m) => <button class="recap-item" onClick={() => onJump(m.step, m.id)}><span class="small">{m.q}</span></button>)}
+        </div>
+      ))}
+    </details>
+  );
+}
+
+function ScorePreview({ result }) {
+  const top = result.recommended.slice(0, 3);
+  return (
+    <div class="recap-score">
+      <span class={`grade ${result.score.grade}`}>{result.score.grade}</span>
+      <div style="flex:1;min-width:0">
+        <strong>{result.score.label}</strong>
+        <div class="small muted">Score {result.score.total} of {result.score.max}{top.length ? ` · Likely fits: ${top.map((r) => r.name.replace(/ \(.*\)$/, '')).join(', ')}` : ''}</div>
+      </div>
+    </div>
+  );
+}
+
+// Copy the recap as plain text, or draft a recap email for the client. Nothing is sent from here.
+function RecapActions({ recap, result, business, answers, names }) {
+  const [draft, setDraft] = useState(null);
+  const text = recapText(recap, { business, result });
+  const openDraft = () => setDraft(recapEmail(answers, { business, contactName: names?.contact, repName: names?.rep, result }));
+  return (
+    <div class="row wrap mb">
+      <CopyButton text={text} label="Copy recap" />
+      <button class="btn sm secondary" onClick={openDraft}><Icon name="mail" size={14} />Send recap to client</button>
+      {draft && (
+        <Dialog title="Recap email draft" onClose={() => setDraft(null)} footer={<><button class="btn ghost" onClick={() => setDraft(null)}>Close</button><a class="btn secondary" href={`mailto:?subject=${encodeURIComponent(draft.subject)}&body=${encodeURIComponent(draft.body)}`}>Open in email app</a><CopyButton text={`Subject: ${draft.subject}\n\n${draft.body}`} label="Copy email" /></>}>
+          <p class="small muted" style="margin-top:0">A draft from the call, in the client's words. Nothing is sent automatically: edit it, then copy it into your email.</p>
+          <label class="field"><span>Subject</span><input class="input" value={draft.subject} onInput={(e) => setDraft({ ...draft, subject: e.target.value })} /></label>
+          <label class="field"><span>Email</span><textarea class="textarea" rows="14" value={draft.body} onInput={(e) => setDraft({ ...draft, body: e.target.value })} /></label>
+        </Dialog>
+      )}
+    </div>
+  );
+}
+
+function Summary({ result, client, recapProps, onJump, onEdit }) {
   return (
     <div class="page" style="max-width:980px">
       <div class="page-head">
@@ -233,6 +469,12 @@ function Summary({ result, client, onEdit }) {
                 </div>
               );
             })}
+          </section>
+          <section class="card">
+            <div class="row between wrap"><h2 style="margin:0">Call recap</h2></div>
+            <p class="small muted">Everything answered on the call. Select an answer to change it.</p>
+            <RecapActions {...recapProps} />
+            <Recap recap={recapProps.recap} onJump={onJump} />
           </section>
           <section class="card">
             <h2>Objections to prepare for</h2>

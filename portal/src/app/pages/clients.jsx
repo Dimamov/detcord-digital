@@ -10,6 +10,7 @@ import { FilesPanel } from './files.jsx';
 import { AuditsTab, WebsiteCheckCard } from './audits.jsx';
 import { GoatTab } from './goat.jsx';
 import { SocialTab } from './social.jsx';
+import { QuestionnaireInvite } from './questionnaire.jsx';
 import { MeetingsTab } from './meetings.jsx';
 import { ReportsTab } from './reports.jsx';
 import { GoogleAdsCard } from './google-ads.jsx';
@@ -495,6 +496,7 @@ function DiscoveryTab({ data, reload }) {
         )}
       </div>
       <div class="stack">
+        <QuestionnaireInvite clientId={data.client.id} />
         <WebsiteCheckCard client={data.client} />
         <section class="card">
           <h2>Pre-call questions</h2>

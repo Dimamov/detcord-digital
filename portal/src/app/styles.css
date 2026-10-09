@@ -268,6 +268,23 @@ tr.click:hover td { background: var(--surface-2); }
 .progress { height: 6px; background: var(--surface-3); border-radius: 99px; overflow: hidden; }
 .progress > div { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .3s; }
 @media (max-width: 1100px) { .runner { grid-template-columns: minmax(0, 1fr); } .runner .outline, .runner .side { position: static; } .runner .outline { display: flex; overflow-x: auto; gap: 4px; } .runner .outline button { white-space: nowrap; width: auto; } }
+/* Discovery recap and answer markers (prefilled / entered by the client, until the rep confirms) */
+.question.marked { background: linear-gradient(90deg, var(--info-soft), transparent 70%); margin: 0 -12px; padding-left: 12px; padding-right: 12px; border-radius: 8px; }
+.question.flash, .recap-row.flash { animation: flash 1.6s ease-out; }
+@keyframes flash { from { box-shadow: 0 0 0 3px var(--accent); } to { box-shadow: 0 0 0 3px transparent; } }
+.mark-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 2px 0 10px; }
+.panel-toggle { display: flex; width: 100%; justify-content: space-between; align-items: center; gap: 8px; background: none; border: 0; padding: 0; color: inherit; font: inherit; cursor: pointer; text-align: left; }
+.live-list { max-height: 52vh; overflow-y: auto; margin-top: 4px; }
+.recap-item { display: flex; flex-direction: column; gap: 2px; width: 100%; text-align: left; background: none; border: 0; border-radius: 8px; padding: 6px 8px; margin: 0 -8px; color: var(--text); font: inherit; cursor: pointer; min-width: 0; overflow-wrap: anywhere; }
+.recap-item:hover, .recap-item:focus-visible { background: var(--surface-2); }
+.recap-section { padding: 12px 0; border-top: 1px solid var(--line); }
+.recap-section summary { cursor: pointer; }
+.recap-section h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 4px; }
+.recap-row { padding: 2px 0; }
+.recap-row .mark-line { margin: 0 0 6px; }
+.recap-answer { white-space: pre-wrap; }
+.recap-score { display: flex; align-items: center; gap: 12px; background: var(--surface-2); border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; }
+@media (max-width: 1100px) { .live-recap { display: none; } }
 
 .kv { display: grid; grid-template-columns: minmax(0, 130px) minmax(0, 1fr); gap: 8px 12px; font-size: 14px; }
 .kv dt { color: var(--muted); }

@@ -3,7 +3,10 @@ import { Hono } from 'hono';
 import { fail, now, newId, sha256, randomToken, readJson, logActivity, EMAIL_RE } from '../lib/util.js';
 import { requireClient } from '../lib/auth.js';
 import { renderEmail, sendEmail } from '../lib/email.js';
-import { computeResult, intakeToAnswers, allQuestionIds, INTAKE } from '../../shared/discovery/engine.js';
+import { computeResult, allQuestionIds, INTAKE } from '../../shared/discovery/engine.js';
+import { buildRecap, recapText, recapEmail } from '../../shared/discovery/recap.js';
+import { applyRepAnswers } from '../../shared/discovery/prefill.js';
+import { parseDiscovery, mutateDiscovery, refreshPrefill, createDiscovery } from '../lib/discovery.js';
 import { checkIndustry } from '../lib/industries.js';
 import { SERVICE_MODULES } from '../../shared/discovery/services.js';
 
@@ -29,7 +32,20 @@ export function cleanAnswers(raw, industry, modules) {
   return out;
 }
 
-const parse = (d) => ({ ...d, modules: JSON.parse(d.modules), answers: JSON.parse(d.answers), result: d.result ? JSON.parse(d.result) : null });
+// The recap, live preview and follow-up email draft for a discovery as it stands.
+async function recapFor(db, d, client, user) {
+  const contact = await db.prepare('SELECT name FROM contacts WHERE client_id=? ORDER BY is_primary DESC, name LIMIT 1').bind(client.id).first();
+  const result = d.status === 'complete' && d.result ? d.result : computeResult(d.answers, d.industry);
+  const recap = buildRecap(d);
+  return {
+    recap,
+    result,
+    text: recapText(recap, { business: client.name, result }),
+    email: recapEmail(d.answers, { business: client.name, contactName: contact?.name, repName: user.name, result }),
+    // For drafting the same email live in the runner.
+    names: { contact: contact?.name || null, rep: user.name },
+  };
+}
 
 r.post('/discoveries', async (c) => {
   const b = await readJson(c);
@@ -37,41 +53,52 @@ r.post('/discoveries', async (c) => {
   const db = c.env.DB;
   const industry = b.industry || client.industry;
   await checkIndustry(db, industry);
-  const modules = cleanModules(b.modules);
-  // Pre-fill from the most recent submitted intake form, if any.
-  const intake = await db.prepare('SELECT answers FROM intake_links WHERE client_id=? AND submitted_at IS NOT NULL ORDER BY submitted_at DESC LIMIT 1').bind(client.id).first();
-  const answers = intake ? cleanAnswers(intakeToAnswers(JSON.parse(intake.answers)), industry, modules) : {};
-  const deal = await db.prepare("SELECT d.id FROM deals d JOIN pipeline_stages ps ON ps.id=d.stage_id WHERE d.client_id=? AND ps.outcome='open' ORDER BY d.updated_at DESC LIMIT 1").bind(client.id).first();
-  const id = newId();
-  await db.prepare('INSERT INTO discoveries (id, client_id, deal_id, rep_id, industry, modules, answers, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)')
-    .bind(id, client.id, deal?.id || null, user.id, industry || null, JSON.stringify(modules), JSON.stringify(answers), now(), now()).run();
-  if (industry && !client.industry) await db.prepare('UPDATE clients SET industry=?, updated_at=? WHERE id=?').bind(industry, now(), client.id).run();
-  await logActivity(db, { clientId: client.id, actorId: user.id, kind: 'discovery', summary: 'Started a discovery call' });
-  return c.json({ id, prefilled: Object.keys(answers).length }, 201);
+  // Prefilled from the client record, the latest intake form and the latest website check.
+  const out = await createDiscovery(db, { client, repId: user.id, actorId: user.id, industry, modules: cleanModules(b.modules) });
+  return c.json(out, 201);
 });
 
 async function loadDiscovery(c, id) {
   const d = await c.env.DB.prepare('SELECT * FROM discoveries WHERE id=?').bind(id).first();
   if (!d) fail(404, 'Discovery not found.');
   const { user, client } = await requireClient(c, d.client_id, { staffOnly: true });
-  return { user, client, d: parse(d) };
+  return { user, client, d: parseDiscovery(d) };
 }
 
+const clientView = (client) => ({ id: client.id, name: client.name, industry: client.industry, website: client.website, city: client.city });
+
 r.get('/discoveries/:id', async (c) => {
-  const { client, d } = await loadDiscovery(c, c.req.param('id'));
-  return c.json({ discovery: d, client: { id: client.id, name: client.name, industry: client.industry, website: client.website, city: client.city } });
+  const { user, client, d: loaded } = await loadDiscovery(c, c.req.param('id'));
+  // Anything the portal learned since the last visit (a new intake form or website check) fills empty questions.
+  const d = await refreshPrefill(c.env.DB, loaded, client);
+  return c.json({ discovery: d, client: clientView(client), ...(await recapFor(c.env.DB, d, client, user)) });
 });
 
-// Autosave. Merges answers; replaces industry/modules when given.
+r.get('/discoveries/:id/recap', async (c) => {
+  const { user, client, d } = await loadDiscovery(c, c.req.param('id'));
+  return c.json(await recapFor(c.env.DB, d, client, user));
+});
+
+// Autosave. Merges answers onto the latest saved state; replaces industry/modules when given.
+// `confirm` (question ids, or 'industry') keeps prefilled or client answers as they are; `dismiss` drops client suggestions.
 r.patch('/discoveries/:id', async (c) => {
-  const { d } = await loadDiscovery(c, c.req.param('id'));
+  const { d: loaded } = await loadDiscovery(c, c.req.param('id'));
+  const db = c.env.DB;
   const b = await readJson(c);
-  const industry = b.industry !== undefined ? await checkIndustry(c.env.DB, b.industry) : d.industry;
-  const modules = b.modules !== undefined ? cleanModules(b.modules) : d.modules;
-  const answers = { ...d.answers, ...cleanAnswers(b.answers, industry, modules) };
-  await c.env.DB.prepare('UPDATE discoveries SET industry=?, modules=?, answers=?, updated_at=? WHERE id=?')
-    .bind(industry, JSON.stringify(modules), JSON.stringify(answers), now(), d.id).run();
-  return c.json({ ok: true, savedAt: now(), preview: computeResult(answers, industry) });
+  const industry = b.industry !== undefined ? await checkIndustry(db, b.industry) : undefined;
+  const modules = b.modules !== undefined ? cleanModules(b.modules) : undefined;
+  const ids = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string').slice(0, 300) : []);
+  const { d, savedAt } = await mutateDiscovery(db, loaded.id, (s) => {
+    if (industry !== undefined) { s.industry = industry; delete s.marks.industry; }
+    if (modules !== undefined) s.modules = modules;
+    applyRepAnswers(s, cleanAnswers(b.answers, s.industry, s.modules));
+    for (const id of ids(b.confirm)) delete s.marks[id];
+    for (const id of ids(b.dismiss)) delete s.suggestions[id];
+  });
+  const preview = computeResult(d.answers, d.industry);
+  // Edits after completion keep the saved result current, so the summary never shows a stale score.
+  if (d.status === 'complete') await db.prepare('UPDATE discoveries SET result=? WHERE id=?').bind(JSON.stringify(preview), d.id).run();
+  return c.json({ ok: true, savedAt, preview, marks: d.marks, suggestions: d.suggestions });
 });
 
 // Completing scores the lead, records recommended services, moves the deal forward and creates the follow-up.
@@ -94,7 +121,8 @@ r.post('/discoveries/:id/complete', async (c) => {
   if (followUp) stmts.push(db.prepare('INSERT INTO tasks (id, client_id, owner_id, title, due_at, created_by, created_at) VALUES (?,?,?,?,?,?,?)').bind(newId(), client.id, user.id, followUp.title, followUp.due, user.id, t));
   await db.batch(stmts);
   await logActivity(db, { clientId: client.id, actorId: user.id, kind: 'discovery', summary: `Discovery complete: grade ${result.score.grade} (${result.score.total}/${result.score.max})` });
-  return c.json({ ok: true, result, followUp });
+  const done = { ...d, status: 'complete', result };
+  return c.json({ ok: true, result, followUp, ...(await recapFor(db, done, client, user)) });
 });
 
 r.delete('/discoveries/:id', async (c) => {
