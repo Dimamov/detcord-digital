@@ -100,6 +100,13 @@ async function insertDraft(db, { user, client, data, title, templateId = null, c
   return { id, number };
 }
 
+// A draft with the given services on blank terms, parties from the client record. Accepted proposals
+// start their agreement here, so it is the same draft "New agreement" makes.
+export async function startAgreement(db, { user, client, services, title }) {
+  const data = { ...(await partiesFor(db, client, user)), ...BLANK_TERMS, services, monthlyStart: '', attachments: [] };
+  return insertDraft(db, { user, client, data, title: title || `${client.name} marketing services agreement` });
+}
+
 // Starts a draft from the client's selected services (default), an active template, or blank terms.
 r.post('/clients/:id/contracts', async (c) => {
   const { user, client } = await requireClient(c, c.req.param('id'), { write: true });

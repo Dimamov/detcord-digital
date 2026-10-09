@@ -386,6 +386,24 @@ tr.me td { background: var(--accent-soft); }
 .report-edit-section { padding: 12px; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-sm); }
 .facts summary { cursor: pointer; font-weight: 600; }
 .facts pre { max-height: 420px; overflow: auto; font-size: 12px; background: var(--surface-2); padding: 12px; border-radius: var(--radius-sm); white-space: pre-wrap; overflow-wrap: anywhere; }
+/* Proposals */
+.svc-pick { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.svc-pick.on { background: var(--surface-2); margin: 0 -10px; padding: 10px; border-radius: var(--radius-sm); border-bottom-color: transparent; }
+.svc-pick-fields { margin: 10px 0 0 28px; }
+.list.one-col { grid-template-columns: minmax(0, 1fr); }
+.svc-total { padding: 12px 0 0; border-top: 2px solid var(--line-strong); }
+.num { text-align: right; white-space: nowrap; }
+tfoot th { color: var(--text); border-bottom: 0; border-top: 1px solid var(--line-strong); }
+.proposal-doc .proposal-svc h2 { font-size: 19px; }
+.proposal-doc h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 14px 0 6px; }
+.proposal-doc .told-us { margin: 10px 0; padding: 10px 14px; background: var(--surface-2); border-left: 3px solid var(--accent); border-radius: var(--radius-sm); }
+.proposal-doc .told-us h3 { margin-top: 2px; }
+.proposal-doc blockquote { margin: 4px 0 0; font-style: italic; }
+.proposal-doc .invest { border-top: 2px solid var(--accent); }
+.proposal-doc ol { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.respond { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.concern-edit + .concern-edit { margin-top: 8px; }
+@media (max-width: 640px) { .svc-pick-fields { margin-left: 0; } }
 @media print {
   .no-print, .sidebar, .bottom-nav, .topbar { display: none !important; }
   :root { --bg: #fff; --surface: #fff; --surface-2: #f5f6f8; --surface-3: #eceef1; --text: #121821; --muted: #4b5563; --faint: #6b7280; --line: #e3e6ea; }
@@ -393,6 +411,8 @@ tr.me td { background: var(--accent-soft); }
   .report-cta .btn { border: 1px solid #999; }
   .monthly-page { padding: 0; max-width: none !important; }
   .monthly-report .next { border-top-color: #999; }
+  .proposal-doc .told-us { background: none; border-left-color: #999; }
+  .proposal-doc .invest { border-top-color: #999; }
 }
 
 /* Customizable dashboards */

@@ -2,6 +2,7 @@ import { useState } from 'preact/hooks';
 import { useLoad, api, toast, date, ago, query, navigate, session } from '../lib.js';
 import { Loading, ErrorBox, Empty, Icon, Field, Dialog, Avatar, useAction } from '../ui.jsx';
 import { SERVICE_CATEGORIES } from '../../shared/services.js';
+import { ProposalsCard } from './proposals.jsx';
 
 const REQUEST_STATUS = { new: ['Sent to your team', 'info'], quoted: ['Quote sent', 'warn'], added: ['Added', 'good'], declined: ['Not going ahead', ''] };
 const STAFF_REQUEST_STATUS = { new: ['New', 'info'], quoted: ['Quoted', 'warn'], added: ['Added', 'good'], declined: ['Declined', ''] };
@@ -40,6 +41,7 @@ function BusinessView({ id, user, businesses }) {
       </div>
       <div class="grid main-side">
         <div class="stack">
+          <ProposalsCard clientId={client.id} />
           <AgreementsCard clientId={client.id} />
           <ServicesCard clientId={client.id} services={services} />
           <TeamCard clientId={client.id} user={user} />
