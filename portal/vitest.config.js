@@ -13,5 +13,7 @@ export default defineConfig({
         ZERNIO_API_KEY: 'test-zernio-key' } },
     }),
   ],
-  test: { setupFiles: ['./test/apply-migrations.js'], include: ['test/**/*.test.js'] },
+  // Each test signs users in (PBKDF2) inside the Workers runtime; on 2-core CI runners running 16 files at once that
+  // passes the 5s default even though the work is fast locally.
+  test: { setupFiles: ['./test/apply-migrations.js'], include: ['test/**/*.test.js'], testTimeout: 20000 },
 });
