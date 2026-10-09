@@ -297,6 +297,7 @@ function CompanySettings() {
       <Field label="Business address"><input class="input" value={f.address} onInput={(e) => setForm({ ...f, address: e.target.value })} /></Field>
       <Field label="Default signer for Detcord" help="name and title"><input class="input" value={f.signer} onInput={(e) => setForm({ ...f, signer: e.target.value })} /></Field>
       <Field label="Notice email"><input class="input" type="email" value={f.email} onInput={(e) => setForm({ ...f, email: e.target.value })} /></Field>
+      <Field label="Michigan county for disputes" help="2026-10 draft terms name its courts, e.g. Oakland"><input class="input" value={f.venueCounty || ''} onInput={(e) => setForm({ ...f, venueCounty: e.target.value })} placeholder="County name" /></Field>
       <Field label="Phone for customers" help="shown on website check reports"><input class="input" type="tel" value={f.phone || ''} onInput={(e) => setForm({ ...f, phone: e.target.value })} /></Field>
       {act.error && <div class="alert bad">{act.error}</div>}
       <div><button class="btn" disabled={act.busy}>Save</button></div>

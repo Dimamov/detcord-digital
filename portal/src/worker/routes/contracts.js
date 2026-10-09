@@ -3,17 +3,20 @@
 import { Hono } from 'hono';
 import { fail, now, newId, sha256, safeEqual, hashPassword, text, cents, oneOf, readJson, logActivity, EMAIL_RE } from '../lib/util.js';
 import { requireUser, requireRole, requireClient, isStaff, clientScopeSql } from '../lib/auth.js';
-import { getSettings, nextNumber } from '../lib/settings.js';
+import { getSettings, putSetting, nextNumber } from '../lib/settings.js';
 import { createInvoice } from '../lib/invoices.js';
 import { sendEmail, renderEmail } from '../lib/email.js';
-import { renderContract, signingProblems, contractTotals, needsReview, SIGNING_STATEMENT } from '../../shared/contract.js';
+import {
+  renderContract, signingProblems, contractTotals, needsReview, signingStatementFor, termsVersionOf,
+  TERMS_V1, TERMS_DRAFT, TERM_MONTHS, MAX_TERM_DISCOUNT, EARLY_TERMINATION, DEFAULT_EARLY_TERMINATION,
+} from '../../shared/contract.js';
 
 const r = new Hono();
 const DAY = 86400000;
 const originOf = (c) => c.env.PUBLIC_URL || new URL(c.req.url).origin;
 
 // The terms part of an agreement: what templates hold and what "blank" starts with. Parties are never terms.
-const BLANK_TERMS = { services: [], depositCents: null, paymentTerms: '', thirdParty: '', additional: '', paymentDays: 15, feedbackDays: 10 };
+const BLANK_TERMS = { services: [], depositCents: null, paymentTerms: '', thirdParty: '', additional: '', paymentDays: 15, feedbackDays: 10, termMonths: 0, termDiscountPct: 0 };
 const pickTerms = (d) => Object.fromEntries(Object.keys(BLANK_TERMS).map((k) => [k, d[k] ?? BLANK_TERMS[k]]));
 
 // Template terms with current catalog names; services removed from the catalog are dropped.
@@ -22,6 +25,27 @@ async function templateTerms(db, data) {
   const terms = pickTerms(data);
   return { ...terms, services: terms.services.filter((s) => known.has(s.serviceId)).map((s) => ({ ...s, name: known.get(s.serviceId) })) };
 }
+
+// Admin choices for agreement terms. The 2026-10 draft terms stay off until an admin switches them on.
+async function contractSettings(db) {
+  const s = await getSettings(db, 'contracts.');
+  return {
+    termsForNew: s.termsForNew === TERMS_DRAFT ? TERMS_DRAFT : TERMS_V1,
+    earlyTermination: EARLY_TERMINATION[s.earlyTermination] ? s.earlyTermination : DEFAULT_EARLY_TERMINATION,
+  };
+}
+
+// Drafts follow the current company details and terms settings; sending freezes them into the agreement.
+const withLiveDetails = (data, company, settings) => ({
+  ...data,
+  providerName: company.legalName || data.providerName, providerAddress: company.address || data.providerAddress,
+  providerEmail: company.email || data.providerEmail || 'info@detcorddigital.com',
+  venueCounty: company.venueCounty || data.venueCounty || '', earlyTermination: settings.earlyTermination,
+});
+
+// Sending on the draft terms is allowed only while an admin has them switched on.
+const TERMS_OFF = 'Terms version: the 2026-10 draft terms are turned off';
+const termsProblems = (data, settings) => (termsVersionOf(data) === TERMS_DRAFT && settings.termsForNew !== TERMS_DRAFT ? [TERMS_OFF] : []);
 
 async function loadContract(c, id, { write = false } = {}) {
   const row = await c.env.DB.prepare('SELECT * FROM contracts WHERE id=?').bind(id).first();
@@ -32,15 +56,14 @@ async function loadContract(c, id, { write = false } = {}) {
   return { user, client, contract: { ...row, data: JSON.parse(row.data) } };
 }
 
-function publicView(contract, user, company = {}) {
+function publicView(contract, user, company = {}, settings = null) {
   const { presented_html, signed_html, signer_ip, signer_ua, ...rest } = contract;
   const out = { ...rest, totals: contractTotals(contract.data) };
   if (isStaff(user)) {
-    // Drafts pick up the current company details when sent, so check against those.
-    const live = contract.status === 'draft'
-      ? { ...contract.data, providerName: company.legalName || contract.data.providerName, providerAddress: company.address || contract.data.providerAddress }
-      : contract.data;
-    out.problems = signingProblems(live);
+    // Drafts pick up the current company details and terms settings when sent, so check against those.
+    const live = contract.status === 'draft' ? withLiveDetails(contract.data, company, settings) : contract.data;
+    out.problems = [...signingProblems(live), ...(contract.status === 'draft' ? termsProblems(live, settings) : [])];
+    out.termsSettings = settings;
     out.reviewServices = contract.data.services.filter((s) => needsReview(s.serviceId)).map((s) => s.name);
   } else {
     delete out.created_by; delete out.void_reason; delete out.template_id; delete out.copied_from;
@@ -90,7 +113,9 @@ async function partiesFor(db, client, user) {
   };
 }
 
+// New agreements, copies included, use the terms version an admin chose for new agreements.
 async function insertDraft(db, { user, client, data, title, templateId = null, copiedFrom = null }) {
+  data = { termMonths: 0, termDiscountPct: 0, ...data, termsVersion: (await contractSettings(db)).termsForNew };
   const deal = await db.prepare("SELECT d.id FROM deals d JOIN pipeline_stages ps ON ps.id=d.stage_id WHERE d.client_id=? AND ps.outcome='open' ORDER BY d.updated_at DESC LIMIT 1").bind(client.id).first();
   const id = newId();
   const t = now();
@@ -161,16 +186,21 @@ r.post('/contracts/:id/redraft', async (c) => {
 r.get('/contracts/:id', async (c) => {
   const { user, client, contract } = await loadContract(c, c.req.param('id'));
   const db = c.env.DB;
-  const company = isStaff(user) ? await getSettings(db, 'company.') : {};
+  const [company, settings] = isStaff(user) ? await Promise.all([getSettings(db, 'company.'), contractSettings(db)]) : [{}, null];
   const changeRequests = (await db.prepare('SELECT id, version, note, author_id, author_name, created_at FROM contract_change_requests WHERE contract_id=? ORDER BY created_at DESC').bind(contract.id).all()).results
     .map(({ author_id, ...cr }) => (isStaff(user) ? { ...cr, author_id } : cr));
   const copiedFrom = isStaff(user) && contract.copied_from ? await db.prepare('SELECT id, number FROM contracts WHERE id=?').bind(contract.copied_from).first() : null;
-  return c.json({ contract: publicView(contract, user, company), client: { id: client.id, name: client.name }, changeRequests, copiedFrom });
+  return c.json({ contract: publicView(contract, user, company, settings), client: { id: client.id, name: client.name }, changeRequests, copiedFrom });
 });
 
 r.get('/contracts/:id/document', async (c) => {
   const { contract } = await loadContract(c, c.req.param('id'));
-  const html = contract.signed_html || contract.presented_html || renderContract(docInput(contract, originOf(c)));
+  let html = contract.signed_html || contract.presented_html;
+  if (!html) {
+    const db = c.env.DB;
+    const data = contract.status === 'draft' ? withLiveDetails(contract.data, await getSettings(db, 'company.'), await contractSettings(db)) : contract.data;
+    html = renderContract(docInput({ ...contract, data }, originOf(c)));
+  }
   const download = c.req.query('download') === '1';
   return new Response(html, {
     headers: {
@@ -203,6 +233,22 @@ async function cleanData(db, clientId, prev, body) {
     const m = String(body.monthlyStart || '');
     if (m && !/^\d{4}-\d{2}-\d{2}$/.test(m)) fail(400, 'Monthly start must be a date.');
     d.monthlyStart = m;
+  }
+  if (body.termMonths !== undefined) {
+    const m = Number(body.termMonths || 0);
+    if (!TERM_MONTHS.includes(m)) fail(400, 'Term must be month to month, or 3, 6, 9 or 12 months.');
+    d.termMonths = m;
+  }
+  if (body.termDiscountPct !== undefined) {
+    const pct = String(body.termDiscountPct ?? '').trim() === '' ? 0 : Number(String(body.termDiscountPct).replace('%', ''));
+    if (!Number.isFinite(pct) || pct < 0 || pct > MAX_TERM_DISCOUNT) fail(400, `Term discount must be between 0 and ${MAX_TERM_DISCOUNT}%.`);
+    d.termDiscountPct = Math.round(pct * 100) / 100;
+  }
+  // Staff may move a draft back to version 1 at any time, onto the draft terms only while an admin allows them.
+  if (body.termsVersion !== undefined) {
+    const v = oneOf(String(body.termsVersion), [TERMS_V1, TERMS_DRAFT], 'Terms version');
+    if (v === TERMS_DRAFT && v !== prev.termsVersion && (await contractSettings(db)).termsForNew !== TERMS_DRAFT) fail(400, 'The 2026-10 draft terms are turned off in Settings.');
+    d.termsVersion = v;
   }
   if (body.paymentDays !== undefined) d.paymentDays = intIn(body.paymentDays, 0, 90, 15);
   if (body.feedbackDays !== undefined) d.feedbackDays = intIn(body.feedbackDays, 1, 30, 10);
@@ -250,7 +296,7 @@ r.patch('/contracts/:id', async (c) => {
     .bind(title, JSON.stringify(data), reopened ? contract.version + 1 : contract.version, now(), contract.id).run();
   if (reopened) await logActivity(db, { clientId: contract.client_id, actorId: user.id, kind: 'contract', summary: `Withdrew ${contract.number} v${contract.version} for edits` });
   const fresh = await loadContract(c, contract.id);
-  return c.json({ contract: publicView(fresh.contract, user, await getSettings(db, 'company.')), reopened });
+  return c.json({ contract: publicView(fresh.contract, user, await getSettings(db, 'company.'), await contractSettings(db)), reopened });
 });
 
 r.delete('/contracts/:id', async (c) => {
@@ -265,8 +311,8 @@ r.delete('/contracts/:id', async (c) => {
 
 // Terms from a request body, cleaned exactly like agreement edits. Parties and attachments are ignored.
 async function cleanTerms(db, prev, body) {
-  const { services, deposit, paymentTerms, thirdParty, additional, paymentDays, feedbackDays } = body;
-  return pickTerms(await cleanData(db, null, prev, { services, deposit, paymentTerms, thirdParty, additional, paymentDays, feedbackDays }));
+  const { services, deposit, paymentTerms, thirdParty, additional, paymentDays, feedbackDays, termMonths, termDiscountPct } = body;
+  return pickTerms(await cleanData(db, null, prev, { services, deposit, paymentTerms, thirdParty, additional, paymentDays, feedbackDays, termMonths, termDiscountPct }));
 }
 
 const templateView = ({ data, ...row }) => { const d = JSON.parse(data); return { ...row, data: d, totals: contractTotals(d) }; };
@@ -325,6 +371,26 @@ r.post('/contracts/:id/template', async (c) => {
   return c.json({ id }, 201);
 });
 
+// ---- terms settings (admin) ---------------------------------------------------
+
+r.get('/settings/contracts', async (c) => {
+  requireRole(c, 'admin', 'rep');
+  return c.json(await contractSettings(c.env.DB));
+});
+
+r.put('/settings/contracts', async (c) => {
+  const user = requireRole(c, 'admin');
+  const db = c.env.DB;
+  const body = await readJson(c);
+  const before = await contractSettings(db);
+  if (body.termsForNew !== undefined) await putSetting(db, 'contracts.termsForNew', oneOf(String(body.termsForNew), [TERMS_V1, TERMS_DRAFT], 'Terms version'), user.id);
+  if (body.earlyTermination !== undefined) await putSetting(db, 'contracts.earlyTermination', oneOf(body.earlyTermination, Object.keys(EARLY_TERMINATION), 'Early termination rule'), user.id);
+  const after = await contractSettings(db);
+  if (after.termsForNew !== before.termsForNew) await logActivity(db, { actorId: user.id, kind: 'contract', summary: `New agreements now use ${after.termsForNew === TERMS_DRAFT ? 'the 2026-10 draft terms' : 'version 1 terms'}` });
+  if (after.earlyTermination !== before.earlyTermination) await logActivity(db, { actorId: user.id, kind: 'contract', summary: `Early termination rule for fixed terms: ${EARLY_TERMINATION[after.earlyTermination].label}` });
+  return c.json(after);
+});
+
 // ---- change requests (client) ------------------------------------------------
 
 // The client asks for changes to a sent agreement. The frozen document stays as it is.
@@ -364,10 +430,10 @@ r.post('/contracts/:id/send', async (c) => {
   const { user, client, contract } = await loadContract(c, c.req.param('id'), { write: true });
   if (contract.status !== 'draft') fail(409, contract.status === 'sent' ? 'Already sent.' : 'This agreement cannot be sent.');
   const db = c.env.DB;
-  // Freeze current company details into the document.
-  const company = await getSettings(db, 'company.');
-  const data = { ...contract.data, providerName: company.legalName || contract.data.providerName, providerAddress: company.address || contract.data.providerAddress, providerEmail: company.email || contract.data.providerEmail || 'info@detcorddigital.com' };
-  const problems = signingProblems(data);
+  // Freeze current company details and the early termination rule into the document.
+  const settings = await contractSettings(db);
+  const data = withLiveDetails(contract.data, await getSettings(db, 'company.'), settings);
+  const problems = [...signingProblems(data), ...termsProblems(data, settings)];
   if (problems.length) return c.json({ error: 'Finish these before sending.', problems }, 400);
   const t = now();
   const sent = { ...contract, data, status: 'sent', issued_at: t };
@@ -383,7 +449,7 @@ r.post('/contracts/:id/send', async (c) => {
   if (contract.deal_id) {
     stmts.push(db.prepare(`UPDATE deals SET setup_cents=?, monthly_cents=?, updated_at=?,
       stage_id=CASE WHEN (SELECT position FROM pipeline_stages WHERE id=deals.stage_id) < (SELECT position FROM pipeline_stages WHERE id='proposal') AND EXISTS (SELECT 1 FROM pipeline_stages WHERE id='proposal') THEN 'proposal' ELSE stage_id END
-      WHERE id=?`).bind(totals.setup, totals.monthly, t, contract.deal_id));
+      WHERE id=?`).bind(totals.setup, totals.monthlyNet, t, contract.deal_id));
   }
   if (stmts.length) await db.batch(stmts);
   await logActivity(db, { clientId: client.id, actorId: user.id, kind: 'contract', internal: false, summary: `Agreement ${contract.number} sent for signature` });
@@ -428,7 +494,7 @@ r.post('/contracts/:id/sign', async (c) => {
   const t = now();
   const ip = c.req.header('CF-Connecting-IP') || null;
   const ua = c.req.header('User-Agent') || null;
-  const signature = { id: newId(), name, title, email: user.email, at: t, consent: SIGNING_STATEMENT, documentHash: contract.document_hash, ip, userAgent: ua };
+  const signature = { id: newId(), name, title, email: user.email, at: t, consent: signingStatementFor(contract.data), documentHash: contract.document_hash, ip, userAgent: ua };
   const signedHtml = renderContract({ ...docInput(contract, originOf(c)), status: 'signed' }, signature);
   const res = await db.prepare(`UPDATE contracts SET status='signed', signed_html=?, signed_at=?, signer_user_id=?, signer_name=?, signer_title=?, signer_email=?, signer_ip=?, signer_ua=?, signature_id=?, updated_at=?
     WHERE id=? AND status='sent' AND document_hash=?`)
@@ -453,7 +519,7 @@ async function afterSigning(c, { client, contract, signerId, t }) {
   const won = await db.prepare("SELECT id FROM pipeline_stages WHERE outcome='won' ORDER BY position LIMIT 1").first();
   if (contract.deal_id && won) {
     stmts.push(db.prepare("UPDATE deals SET stage_id=?, setup_cents=?, monthly_cents=?, closed_at=COALESCE(closed_at, ?), updated_at=? WHERE id=?")
-      .bind(won.id, totals.setup, totals.monthly, t, t, contract.deal_id));
+      .bind(won.id, totals.setup, totals.monthlyNet, t, t, contract.deal_id));
   }
   await db.batch(stmts);
 

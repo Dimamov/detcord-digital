@@ -2,7 +2,9 @@ import { useState, useEffect, useRef } from 'preact/hooks';
 import { useLoad, api, toast, money, dollars, date, dateTime, navigate } from '../lib.js';
 import { Loading, ErrorBox, Empty, Icon, Field, Dialog, useAction } from '../ui.jsx';
 import { FilePicker } from './files.jsx';
-import { contractTotals, SIGNING_STATEMENT } from '../../shared/contract.js';
+import {
+  contractTotals, signingStatementFor, termsVersionOf, TERMS_V1, TERMS_DRAFT, TERMS_VERSIONS, TERM_MONTHS, EARLY_TERMINATION, DEFAULT_EARLY_TERMINATION,
+} from '../../shared/contract.js';
 
 const STATUS = { draft: ['Draft', ''], sent: ['Awaiting signature', 'warn'], signed: ['Signed', 'good'], void: ['Voided', 'bad'] };
 export const ContractBadge = ({ status }) => <span class={`badge ${STATUS[status]?.[1] || ''}`}>{STATUS[status]?.[0] || status}</span>;
@@ -28,7 +30,7 @@ export function ContractsTab({ clientId, user }) {
               </div>
               <div style="text-align:right" class="small">
                 <div>{money(ct.totals.setup)} one-time</div>
-                <div class="muted">{money(ct.totals.monthly)}/mo</div>
+                <div class="muted">{money(ct.totals.monthlyNet ?? ct.totals.monthly)}/mo{ct.totals.termMonths ? ` · ${ct.totals.termMonths} mo term` : ''}</div>
               </div>
               {user.role !== 'client' && ct.status === 'sent' && ct.change_requests > 0 && <span class="badge bad">Changes requested</span>}
               <ContractBadge status={ct.status} />
@@ -63,7 +65,7 @@ function NewAgreement({ clientId, onClose }) {
           templates.loading ? <Loading /> : list.length ? (
             <select class="select" value={templateId} onChange={(e) => setTemplateId(e.target.value)} aria-label="Template">
               <option value="">Choose a template…</option>
-              {list.map((t) => <option value={t.id}>{t.name} · {money(t.totals.setup)} one-time, {money(t.totals.monthly)}/mo</option>)}
+              {list.map((t) => <option value={t.id}>{t.name} · {money(t.totals.setup)} one-time, {money(t.totals.monthlyNet ?? t.totals.monthly)}/mo{t.totals.termMonths ? `, ${t.totals.termMonths} mo term` : ''}</option>)}
             </select>
           ) : <p class="small muted" style="margin:0">No templates yet. Admins add them in Settings → Agreement templates.</p>
         )}
@@ -89,6 +91,26 @@ async function duplicateContract(contract) {
   const { id, number } = await api('POST', `/contracts/${contract.id}/duplicate`);
   toast(`New draft ${number} created from ${contract.number}.`);
   navigate(`/contracts/${id}`);
+}
+
+const termLabel = (m) => (Number(m) ? `${m} months` : 'Month to month');
+const DRAFT_TERMS_WARNING = 'This agreement uses the 2026-10 draft terms. A Michigan attorney has not approved them yet. Only Detcord staff see this note.';
+
+// Totals rows shared by the editor and the sent view. Fixed terms show the discount and the value for the term.
+function TotalsList({ totals }) {
+  return (
+    <dl class="kv">
+      <dt>One-time</dt><dd>{money(totals.setup)}</dd>
+      <dt>Monthly</dt><dd>{money(totals.monthly)}/mo</dd>
+      {totals.monthlyDiscount > 0 && <><dt>Term discount ({totals.discountPct}%)</dt><dd>−{money(totals.monthlyDiscount)}/mo</dd><dt>Monthly after discount</dt><dd>{money(totals.monthlyNet)}/mo</dd></>}
+      <dt>Deposit</dt><dd>{money(totals.deposit)}</dd>
+      <dt>Balance after deposit</dt><dd>{money(totals.setupAfterDeposit)}</dd>
+      <dt>Term</dt><dd>{termLabel(totals.termMonths)}</dd>
+      {totals.termMonths
+        ? <><dt>Contract value for the term</dt><dd><strong>{money(totals.termValue)}</strong></dd></>
+        : <><dt>First-year value</dt><dd><strong>{money(totals.setup + totals.monthly * 12)}</strong></dd></>}
+    </dl>
+  );
 }
 
 const CopiedFrom = ({ copiedFrom }) => copiedFrom && <div class="small muted">Copied from <a href={`/contracts/${copiedFrom.id}`}>{copiedFrom.number}</a>.</div>;
@@ -119,6 +141,7 @@ function toForm(ct) {
     services: d.services.map((s) => ({ serviceId: s.serviceId, name: s.name, setup: dollars(s.setupCents), monthly: dollars(s.monthlyCents), scope: s.scope || '' })),
     deposit: dollars(d.depositCents), monthlyStart: d.monthlyStart || '', paymentDays: d.paymentDays ?? 15, feedbackDays: d.feedbackDays ?? 10,
     paymentTerms: d.paymentTerms || '', thirdParty: d.thirdParty || '', additional: d.additional || '',
+    termMonths: d.termMonths || 0, termDiscountPct: d.termDiscountPct ? String(d.termDiscountPct) : '', termsVersion: termsVersionOf(d),
     providerSigner: d.providerSigner || '', clientLegalName: d.clientLegalName || '', clientAddress: d.clientAddress || '', clientEmail: d.clientEmail || '',
     attachments: d.attachments || [],
   };
@@ -130,6 +153,9 @@ const PROBLEM_FIELDS = {
   'Who signs for Detcord': 'f-providerSigner', 'Client’s legal business name': 'f-clientLegalName', 'Client’s address': 'f-clientAddress',
   'Client’s notice email': 'f-clientEmail', 'At least one service': 'f-add-service', 'When monthly billing starts': 'f-monthlyStart',
   'Deposit is larger than the first invoice total': 'f-deposit',
+  'Term: month to month, or 3, 6, 9 or 12 months': 'f-termMonths', 'A fixed term needs at least one monthly fee': 'f-termMonths',
+  'A term discount needs a fixed term': 'f-termDiscountPct', 'Term discount between 0 and 50%': 'f-termDiscountPct',
+  'Terms version: the 2026-10 draft terms are turned off': 'f-termsVersion',
 };
 function problemTarget(p, services) {
   if (p.includes('(Settings → Company)')) return { href: '/settings?tab=company' };
@@ -193,10 +219,16 @@ function ContractEditor({ data, user, reload }) {
   };
   useEffect(() => () => clearTimeout(timer.current), []);
   const setService = (i, patch) => update({ services: form.services.map((s, k) => (k === i ? { ...s, ...patch } : s)) });
-  const totals = contractTotals({ services: form.services.map((s) => ({ setupCents: centsOf(s.setup), monthlyCents: centsOf(s.monthly) })), depositCents: centsOf(form.deposit) });
+  const totals = contractTotals({ services: form.services.map((s) => ({ setupCents: centsOf(s.setup), monthlyCents: centsOf(s.monthly) })), depositCents: centsOf(form.deposit), termMonths: form.termMonths, termDiscountPct: form.termDiscountPct });
+  const settings = saved.termsSettings || {};
+  const draftTerms = form.termsVersion === TERMS_DRAFT;
   const available = (catalog.data?.services || []).filter((s) => s.active && !form.services.some((x) => x.serviceId === s.id));
 
-  const doSend = () => send.run(async () => {
+  const doSend = () => {
+    if (draftTerms && !confirm('This agreement uses the 2026-10 draft terms, which a Michigan attorney has not approved yet. Send it for signature anyway?')) return;
+    sendNow();
+  };
+  const sendNow = () => send.run(async () => {
     clearTimeout(timer.current);
     await save(form);
     try {
@@ -273,6 +305,24 @@ function ContractEditor({ data, user, reload }) {
             </div>
           </section>
           <section class="card">
+            <h2>Term</h2>
+            <div class="form-grid">
+              <Field label="Term"><select id="f-termMonths" class="select" value={form.termMonths} onChange={(e) => update({ termMonths: Number(e.target.value) })}>{TERM_MONTHS.map((m) => <option value={m}>{termLabel(m)}</option>)}</select></Field>
+              <Field label="Term discount (%)" help="optional, off monthly fees"><input id="f-termDiscountPct" class="input" inputMode="decimal" value={form.termDiscountPct} onInput={(e) => update({ termDiscountPct: e.target.value })} placeholder="0" /></Field>
+              <div class="full small muted">
+                {!Number(form.termMonths) ? 'Either party can cancel a monthly service with 30 days’ notice.'
+                  : draftTerms ? `After ${form.termMonths} months: month to month with 30 days’ notice. Early termination: ${EARLY_TERMINATION[settings.earlyTermination || DEFAULT_EARLY_TERMINATION].label.toLowerCase()} (an admin sets this in Settings → Agreement templates).`
+                    : `Version 1 terms: the term is added to Additional scope as a change to “Term and cancellation”, with no early termination fee. After ${form.termMonths} months: month to month with 30 days’ notice.`}
+              </div>
+              <Field label="Terms version">
+                <select id="f-termsVersion" class="select" value={form.termsVersion} onChange={(e) => update({ termsVersion: e.target.value })}>
+                  <option value={TERMS_V1}>{TERMS_VERSIONS[TERMS_V1]}</option>
+                  {(draftTerms || settings.termsForNew === TERMS_DRAFT) && <option value={TERMS_DRAFT}>{TERMS_VERSIONS[TERMS_DRAFT]} (needs attorney approval)</option>}
+                </select>
+              </Field>
+            </div>
+          </section>
+          <section class="card">
             <h2>Parties</h2>
             <div class="form-grid">
               <Field label="Client legal name"><input id="f-clientLegalName" class="input" value={form.clientLegalName} onInput={(e) => update({ clientLegalName: e.target.value })} /></Field>
@@ -293,13 +343,7 @@ function ContractEditor({ data, user, reload }) {
         <aside class="stack" style="position:sticky;top:16px">
           <section class="card">
             <h3>Totals</h3>
-            <dl class="kv">
-              <dt>One-time</dt><dd>{money(totals.setup)}</dd>
-              <dt>Monthly</dt><dd>{money(totals.monthly)}/mo</dd>
-              <dt>Deposit</dt><dd>{money(totals.deposit)}</dd>
-              <dt>Balance after deposit</dt><dd>{money(totals.setupAfterDeposit)}</dd>
-              <dt>First-year value</dt><dd><strong>{money(totals.setup + totals.monthly * 12)}</strong></dd>
-            </dl>
+            <TotalsList totals={totals} />
           </section>
           <section class="card">
             <h3>{blocking?.length ? 'Before you send' : 'Ready to send'}</h3>
@@ -307,7 +351,8 @@ function ContractEditor({ data, user, reload }) {
               : <p class="small muted" style="margin:0">Sending signs for Detcord, freezes this version and emails the client a link to review and sign.</p>}
           </section>
           {saved.reviewServices?.length > 0 && <div class="alert warn small">Legal review: the wording for {saved.reviewServices.join(', ')} is new and has not been reviewed by counsel yet.</div>}
-          <div class="alert info small">The general terms are Detcord’s existing Michigan agreement language. Generated agreements are not a substitute for legal advice.</div>
+          {draftTerms ? <div class="alert warn small">{DRAFT_TERMS_WARNING}</div>
+            : <div class="alert info small">The general terms are Detcord’s existing Michigan agreement language. Generated agreements are not a substitute for legal advice.</div>}
           <CopiedFrom copiedFrom={data.copiedFrom} />
           <div class="row" style="gap:6px">
             <button class="btn ghost sm" onClick={copy} disabled={send.busy}><Icon name="copy" />Duplicate</button>
@@ -361,6 +406,7 @@ function StaffContractView({ data, user, reload }) {
         {user.role === 'admin' && contract.status !== 'void' && <button class="btn ghost" onClick={voidIt} disabled={act.busy}>Void</button>}
       </Head>
       {act.error && <div class="alert bad mb">{act.error}</div>}
+      {termsVersionOf(contract.data) === TERMS_DRAFT && <div class="alert warn mb">{DRAFT_TERMS_WARNING}</div>}
       {open.length > 0 && <div class="alert bad mb"><strong>{client.name} asked for changes.</strong> The sent version can’t change. Use <strong>Void and redraft</strong> to make an editable copy, then send it again.</div>}
       <div class="grid main-side">
         <DocFrame id={contract.id} version={contract.version} tall />
@@ -388,7 +434,7 @@ function StaffContractView({ data, user, reload }) {
           </section>
           <section class="card">
             <h3>Totals</h3>
-            <dl class="kv"><dt>One-time</dt><dd>{money(contract.totals.setup)}</dd><dt>Monthly</dt><dd>{money(contract.totals.monthly)}/mo</dd><dt>Deposit</dt><dd>{money(contract.totals.deposit)}</dd></dl>
+            <TotalsList totals={contract.totals} />
           </section>
           {contract.status === 'sent' && <div class="alert info small">Waiting for the client to sign in their portal. Editing withdraws this version.</div>}
           {contract.status === 'signed' && <div class="alert good small">Locked. Services were activated and invoices created. <a href={`/clients/${client.id}?tab=billing`}>See billing</a>.</div>}
@@ -433,7 +479,7 @@ function ClientContract({ data, reload }) {
               <Field label="Your full name"><input class="input" required value={form.name} onInput={(e) => setForm({ ...form, name: e.target.value })} autocomplete="name" /></Field>
               <Field label="Your title" help={`at ${client.name}`}><input class="input" required value={form.title} onInput={(e) => setForm({ ...form, title: e.target.value })} placeholder="Owner" /></Field>
               <Field label="Your portal password" help="confirms it’s you"><input class="input" type="password" required value={form.password} onInput={(e) => setForm({ ...form, password: e.target.value })} autocomplete="current-password" /></Field>
-              <label class="check small"><input type="checkbox" checked={form.consent} onChange={(e) => setForm({ ...form, consent: e.target.checked })} required />{SIGNING_STATEMENT}</label>
+              <label class="check small"><input type="checkbox" checked={form.consent} onChange={(e) => setForm({ ...form, consent: e.target.checked })} required />{signingStatementFor(contract.data)}</label>
               {act.error && <div class="alert bad">{act.error}</div>}
               <button class="btn block" disabled={act.busy || !form.consent}><Icon name="pen" />Sign agreement</button>
               <p class="small faint" style="margin:0">Your typed name, account, time and a fingerprint of this exact document are recorded.</p>
@@ -487,10 +533,44 @@ function AskForChanges({ contract, requests, reload }) {
 // ---- admin: agreement templates (Settings) -------------------------------------
 
 function toTemplateForm(t) {
-  const { services, deposit, paymentDays, feedbackDays, paymentTerms, thirdParty, additional } = toForm({ title: '', data: { ...t.data, attachments: [] } });
-  return { id: t.id, name: t.name || '', description: t.description || '', services, deposit, paymentDays, feedbackDays, paymentTerms, thirdParty, additional };
+  const { services, deposit, paymentDays, feedbackDays, paymentTerms, thirdParty, additional, termMonths, termDiscountPct } = toForm({ title: '', data: { ...t.data, attachments: [] } });
+  return { id: t.id, name: t.name || '', description: t.description || '', services, deposit, paymentDays, feedbackDays, paymentTerms, thirdParty, additional, termMonths, termDiscountPct };
 }
-const BLANK_TEMPLATE = { services: [], depositCents: null, paymentDays: 15, feedbackDays: 10, paymentTerms: '', thirdParty: '', additional: '' };
+const BLANK_TEMPLATE = { services: [], depositCents: null, paymentDays: 15, feedbackDays: 10, paymentTerms: '', thirdParty: '', additional: '', termMonths: 0, termDiscountPct: 0 };
+
+// Which terms new agreements use, and the early termination rule for fixed terms (2026-10 draft terms only).
+function AgreementTermsSettings() {
+  const { loading, data, error, reload } = useLoad('/settings/contracts');
+  const act = useAction();
+  if (loading) return <Loading />;
+  if (error) return <ErrorBox error={error} retry={reload} />;
+  const put = (patch, message) => act.run(async () => { await api('PUT', '/settings/contracts', patch); toast(message); reload(); });
+  const chooseTerms = (e) => {
+    const v = e.target.value;
+    if (v === TERMS_DRAFT && !confirm('Use the 2026-10 draft terms for new agreements? They have not been approved by a Michigan attorney yet.')) { e.target.value = data.termsForNew; return; }
+    put({ termsForNew: v }, v === TERMS_DRAFT ? 'New agreements now use the 2026-10 draft terms.' : 'New agreements now use version 1 terms.');
+  };
+  return (
+    <section class="card stack">
+      <h2 style="margin:0">Agreement terms</h2>
+      <Field label="Terms used for new agreements">
+        <select class="select" value={data.termsForNew} onChange={chooseTerms} disabled={act.busy}>
+          <option value={TERMS_V1}>{TERMS_VERSIONS[TERMS_V1]}, default</option>
+          <option value={TERMS_DRAFT}>{TERMS_VERSIONS[TERMS_DRAFT]} (needs attorney approval)</option>
+        </select>
+      </Field>
+      <div class="alert warn small">The 2026-10 draft terms were written for review by a Michigan attorney and have not been approved. Keep version 1 until the attorney signs off. Changing this affects new agreements only: drafts keep their terms, and sent or signed agreements never change.</div>
+      <Field label="Early termination of fixed terms" help="2026-10 draft terms only">
+        <select class="select" value={data.earlyTermination} onChange={(e) => put({ earlyTermination: e.target.value }, 'Early termination rule saved.')} disabled={act.busy}>
+          {Object.entries(EARLY_TERMINATION).map(([k, rule]) => <option value={k}>{rule.label}{k === DEFAULT_EARLY_TERMINATION ? ' (default)' : ''}</option>)}
+        </select>
+      </Field>
+      <p class="small muted" style="margin:0">{EARLY_TERMINATION[data.earlyTermination].text}</p>
+      <p class="small faint" style="margin:0">Drafts follow this rule until they are sent; a sent agreement keeps the rule it was sent with. Version 1 agreements with a fixed term have no early termination fee.</p>
+      {act.error && <div class="alert bad">{act.error}</div>}
+    </section>
+  );
+}
 
 // Packages reps can start an agreement from. Terms only: parties always come from the client.
 export function TemplateSettings() {
@@ -503,13 +583,14 @@ export function TemplateSettings() {
   const setArchive = (t, value) => act.run(async () => { await api('PUT', `/contract-templates/${t.id}`, { archived: value }); toast(value ? `${t.name} archived.` : `${t.name} restored.`); reload(); });
   return (
     <div class="stack">
-      <div class="alert info">Templates hold services, prices, scope and payment terms. Starting an agreement from one copies those terms; the client’s legal name, address and email always come from the client record. The general terms never change.</div>
+      <AgreementTermsSettings />
+      <div class="alert info">Templates hold services, prices, scope, payment terms and the contract term. Starting an agreement from one copies those terms; the client’s legal name, address and email always come from the client record. The general terms follow the version chosen above.</div>
       <section class="card">
         {data.templates.length ? data.templates.map((t) => (
           <div class="row" style="padding:10px 0;border-bottom:1px solid var(--line)">
             <div style="flex:1;min-width:0">
               <strong style={t.archived_at ? 'opacity:.5' : ''}>{t.name}</strong> {t.archived_at && <span class="badge">Archived</span>}
-              <div class="small muted">{t.data.services.map((s) => s.name).join(', ') || 'No services'} · {money(t.totals.setup)} one-time · {money(t.totals.monthly)}/mo{t.description ? ` · ${t.description}` : ''}</div>
+              <div class="small muted">{t.data.services.map((s) => s.name).join(', ') || 'No services'} · {money(t.totals.setup)} one-time · {money(t.totals.monthlyNet ?? t.totals.monthly)}/mo{t.totals.termMonths ? ` · ${t.totals.termMonths} mo term` : ''}{t.description ? ` · ${t.description}` : ''}</div>
             </div>
             <button class="btn sm ghost" onClick={() => setEdit(toTemplateForm(t))}>Edit</button>
             <button class="btn sm ghost" disabled={act.busy} onClick={() => setArchive(t, !t.archived_at)}>{t.archived_at ? 'Restore' : 'Archive'}</button>
@@ -568,6 +649,8 @@ function TemplateDialog({ edit, setEdit, onSaved }) {
           <Field label="Deposit at signing ($)" help="credited against one-time fees"><input class="input" inputMode="decimal" value={edit.deposit} onInput={(e) => set({ deposit: e.target.value })} placeholder="0" /></Field>
           <Field label="Invoices due (days)"><input class="input" type="number" min="0" max="90" value={edit.paymentDays} onInput={(e) => set({ paymentDays: e.target.value })} /></Field>
           <Field label="Client feedback period (business days)"><input class="input" type="number" min="1" max="30" value={edit.feedbackDays} onInput={(e) => set({ feedbackDays: e.target.value })} /></Field>
+          <Field label="Term"><select class="select" value={edit.termMonths} onChange={(e) => set({ termMonths: Number(e.target.value) })}>{TERM_MONTHS.map((m) => <option value={m}>{termLabel(m)}</option>)}</select></Field>
+          <Field label="Term discount (%)" help="optional, off monthly fees"><input class="input" inputMode="decimal" value={edit.termDiscountPct} onInput={(e) => set({ termDiscountPct: e.target.value })} placeholder="0" /></Field>
           <div class="full"><Field label="Payment schedule and milestones" help="leave blank for: deposit at signing, rest on completion, monthly in advance"><textarea class="textarea" value={edit.paymentTerms} onInput={(e) => set({ paymentTerms: e.target.value })} /></Field></div>
           <div class="full"><Field label="Ad budget and third-party costs" help="leave blank: not included, need written approval"><input class="input" value={edit.thirdParty} onInput={(e) => set({ thirdParty: e.target.value })} /></Field></div>
           <div class="full"><Field label="Additional scope and exceptions"><textarea class="textarea" value={edit.additional} onInput={(e) => set({ additional: e.target.value })} placeholder="Anything agreed that changes the standard terms. Name the section it changes." /></Field></div>

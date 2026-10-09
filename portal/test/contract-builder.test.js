@@ -74,7 +74,7 @@ describe('agreement templates', () => {
     expect(res.status).toBe(201);
     const row = await env.DB.prepare('SELECT data FROM contract_templates WHERE id=?').bind((await res.json()).id).first();
     const data = JSON.parse(row.data);
-    expect(Object.keys(data).sort()).toEqual(['additional', 'depositCents', 'feedbackDays', 'paymentDays', 'paymentTerms', 'services', 'thirdParty']);
+    expect(Object.keys(data).sort()).toEqual(['additional', 'depositCents', 'feedbackDays', 'paymentDays', 'paymentTerms', 'services', 'termDiscountPct', 'termMonths', 'thirdParty']);
     expect(data.additional).toBe('Rush delivery');
   });
 });
