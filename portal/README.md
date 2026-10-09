@@ -239,6 +239,19 @@ up. The sent document never changes; staff use **Void and redraft**, which voids
 opens an editable copy. Reps can do that for sent agreements; voiding a signed one stays admin-only. The editor lists
 everything that blocks sending, each linked to the field (or to Settings → Company) that fixes it.
 
+**Term:** month to month (the default) or 3, 6, 9 or 12 months, with an optional term discount off monthly fees. The
+document and totals show the discount and the contract value for the term; monthly invoices from the agreement add
+the discount as a credit line. After a fixed term, services continue month to month with 30 days' notice.
+
+**Terms versions:** each agreement stores `termsVersion`. Every new agreement (including copies) uses **version
+2026-10**, the terms researched against Michigan and federal law (sources in `agreement-review-michigan.md` in the
+project files). Agreements created earlier keep **version 1**, whose text never changes (a test pins its hashes);
+a draft can be moved between versions under **Term** in the editor. Version 2026-10 names a Michigan county for
+disputes, set in **Settings → Company**, and sending is blocked until it is filled in. **Settings → Agreement
+templates** sets the early-termination rule for fixed terms (default: 50% of the remaining monthly fees); a sent
+agreement keeps the rule it was sent with. On version 1, a fixed term is added to Additional scope as a change to
+"Term and cancellation", with no early-termination fee.
+
 ## Client self-service
 
 Clients have a **Business** page (`/business`). With access to more than one business, they pick which one at the top,

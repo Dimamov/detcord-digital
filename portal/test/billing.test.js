@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { env, SELF } from 'cloudflare:test';
 import { as, PASSWORD } from './helpers.js';
 import { verifyCloverSignature, cloverConfig } from '../src/worker/lib/clover.js';
-import { signingProblems, needsReview, SERVICE_TERMS, REVIEW_TERMS } from '../src/shared/contract.js';
+import { signingProblems, termsFor, SERVICE_TERMS, REVIEW_TERMS, TERMS_2026_10 } from '../src/shared/contract.js';
 import { SERVICES } from '../src/shared/services.js';
 
 const BASE = 'https://portal.test';
@@ -19,7 +19,7 @@ async function setup() {
   const admin = await as('admin');
   const repA = await as('rep');
   const repB = await as('rep');
-  await admin.call('PUT', '/api/settings/company', { legalName: 'Detcord Digital LLC', address: '1 Main St, Detroit, MI 48226', signer: 'Dima' });
+  await admin.call('PUT', '/api/settings/company', { legalName: 'Detcord Digital LLC', address: '1 Main St, Detroit, MI 48226', signer: 'Dima', venueCounty: 'Oakland' });
   const mk = async (name, repId) => (await (await admin.call('POST', '/api/clients', { name, repId, email: `${name.split(' ')[0].toLowerCase()}@example.com`, address: '10 Elm St', city: 'Troy' })).json()).id;
   const clientA = await mk('Alpha Plumbing', repA.id);
   const clientB = await mk('Bravo Dental', repB.id);
@@ -64,11 +64,13 @@ const webhook = async (payload, header) => {
 afterEach(() => vi.restoreAllMocks());
 
 describe('contract language', () => {
-  it('every catalog service has terms, and new wording is flagged for legal review', () => {
-    // Email and SMS marketing (split from email-sms) have no wording yet: agreements use the generic line and flag them for review.
-    const noTermsYet = ['email', 'sms'];
-    for (const s of SERVICES) if (!noTermsYet.includes(s.id)) expect(SERVICE_TERMS[s.id] || REVIEW_TERMS[s.id], s.id).toBeTruthy();
-    for (const id of noTermsYet) expect(needsReview(id), id).toBe(true);
+  it('every catalog service has terms in both terms versions', () => {
+    for (const s of SERVICES) {
+      expect(termsFor(s.id), s.id).toBeTruthy();
+      expect(termsFor(s.id, TERMS_2026_10), s.id).toBeTruthy();
+    }
+    // The retired combined service keeps its wording so older agreements still render.
+    expect(termsFor('email-sms')).toBe(SERVICE_TERMS['email-sms']);
     expect(Object.keys(REVIEW_TERMS).sort()).toEqual(['accessibility', 'booking', 'citations', 'lsa']);
   });
 

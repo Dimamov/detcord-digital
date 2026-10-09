@@ -16,7 +16,7 @@ async function setup() {
   const admin = await as('admin');
   const repA = await as('rep');
   const repB = await as('rep');
-  await admin.call('PUT', '/api/settings/company', { legalName: 'Detcord Digital LLC', address: '1 Main St, Detroit, MI 48226', signer: 'Dima' });
+  await admin.call('PUT', '/api/settings/company', { legalName: 'Detcord Digital LLC', address: '1 Main St, Detroit, MI 48226', signer: 'Dima', venueCounty: 'Oakland' });
   const mk = async (name, repId) => (await (await admin.call('POST', '/api/clients', { name, repId, email: `${name.split(' ')[0].toLowerCase()}@example.com`, address: '10 Elm St', city: 'Troy' })).json()).id;
   const clientA = await mk('Alpha Plumbing', repA.id);
   const clientB = await mk('Bravo Dental', repB.id);
@@ -74,7 +74,7 @@ describe('agreement templates', () => {
     expect(res.status).toBe(201);
     const row = await env.DB.prepare('SELECT data FROM contract_templates WHERE id=?').bind((await res.json()).id).first();
     const data = JSON.parse(row.data);
-    expect(Object.keys(data).sort()).toEqual(['additional', 'depositCents', 'feedbackDays', 'paymentDays', 'paymentTerms', 'services', 'thirdParty']);
+    expect(Object.keys(data).sort()).toEqual(['additional', 'depositCents', 'feedbackDays', 'paymentDays', 'paymentTerms', 'services', 'termDiscountPct', 'termMonths', 'thirdParty']);
     expect(data.additional).toBe('Rush delivery');
   });
 });

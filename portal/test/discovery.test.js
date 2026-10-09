@@ -90,9 +90,10 @@ describe('service catalog', () => {
     expect(catalog.filter((s) => s.active).map((s) => s.id)).toEqual(expect.arrayContaining(['email', 'sms']));
     expect(catalog.find((s) => s.id === 'email-sms').active).toBe(0);
 
-    // No approved contract language yet: the agreement editor flags them for review and uses the generic line.
+    // Both have agreement wording; version 1 agreements flag them because the wording postdates version 1.
     expect(needsReview('email')).toBe(true);
     expect(needsReview('sms')).toBe(true);
-    expect(termsFor('email')).toBe(null);
+    expect(termsFor('email')).toMatch(/^Approved email campaigns/);
+    expect(termsFor('sms')).toMatch(/^Approved text message campaigns/);
   });
 });
