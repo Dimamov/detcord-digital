@@ -97,15 +97,23 @@ export const SERVICE_MODULES = {
       q('content_compliance', 'Any compliance rules on what you can claim (medical, legal, financial)?', 'long'),
     ],
   },
-  'email-sms': {
-    intro: 'Goal: turn the existing customer list into repeat business and referrals.',
+  email: {
+    intro: 'Goal: turn the existing customer and lead list into repeat jobs and referrals by email.',
     questions: [
-      q('em_list_size', 'How many customer emails and phone numbers do you have?', 'text'),
+      q('em_list_size', 'How many customer and lead email addresses do you have?', 'text'),
       q('em_list_source', 'Where does the list live?', 'text', { placeholder: 'e.g. Jobber, QuickBooks, Dentrix, spreadsheet' }),
-      yn('em_consent', 'Did customers agree to receive texts? (Required for SMS marketing.)'),
       q('em_campaigns', 'What would you send?', 'multi', { options: opts('newsletter|Newsletter', 'promos|Seasonal promotions', 'reminders|Maintenance or appointment reminders', 'reviews|Review requests', 'winback|Win-back for inactive customers', 'referral|Referral asks', 'birthday|Birthday / anniversary') }),
       q('em_frequency', 'How often?', 'single', { options: opts('weekly|Weekly', 'biweekly|Every 2 weeks', 'monthly|Monthly') }),
       q('em_tool', 'Do you use an email tool already (Mailchimp, Constant Contact...)?', 'text'),
+    ],
+  },
+  sms: {
+    intro: 'Goal: reach opted-in customers by text for reminders, offers and win-backs, with consent on record.',
+    questions: [
+      q('sms_list_size', 'How many customer mobile numbers do you have?', 'text'),
+      yn('em_consent', 'Did customers agree to receive marketing texts? (Required for SMS marketing.)'),
+      q('sms_campaigns', 'What would you text?', 'multi', { options: opts('reminders|Appointment or service reminders', 'promos|Offers and promotions', 'reviews|Review requests', 'winback|Win-back for inactive customers', 'alerts|Weather or schedule alerts') }),
+      q('sms_tool', 'Do you text customers from any tool today (Podium, your booking software, a cell phone)?', 'text'),
     ],
   },
   'lead-response': {

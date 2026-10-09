@@ -34,7 +34,7 @@ export const INDUSTRIES = [
   },
   {
     id: 'hvac', name: 'HVAC', group: 'home',
-    keyServices: ['lsa', 'ppc', 'seo', 'email-sms', 'lead-response', 'booking'],
+    keyServices: ['lsa', 'ppc', 'seo', 'email', 'lead-response', 'booking'],
     questions: [...trade('hvac'), job('hvac_jobs', 'Which do you want more of: furnace and AC replacements, repairs, tune-ups, ductless, commercial?'), yn('hvac_rebates', 'Do you promote utility rebates (DTE / Consumers Energy) or federal tax credits?')],
     listenFor: ['Replacement installs are the profit; tune-ups feed them. Ask how many tune-up customers become installs.', 'Maintenance plan members are the best email/SMS list.', 'Shoulder seasons (spring and fall) are slow; that is when to push tune-ups.'],
     michigan: 'Furnace no-heat calls peak with the first cold snap; AC peaks with summer heat waves. Utility rebate programs from DTE and Consumers Energy are strong ad hooks.',
@@ -76,7 +76,7 @@ export const INDUSTRIES = [
   },
   {
     id: 'landscaping', name: 'Landscaping and lawn care', group: 'home',
-    keyServices: ['gbp', 'seo', 'email-sms', 'social', 'booking', 'referral'],
+    keyServices: ['gbp', 'seo', 'email', 'social', 'booking', 'referral'],
     questions: [
       q('ls_services', 'What do you offer?', 'multi', { options: opts('maintenance|Lawn maintenance', 'design-build|Design / build', 'hardscape|Hardscape and patios', 'irrigation|Irrigation', 'lighting|Landscape lighting', 'snow|Snow removal') }),
       yn('ls_recurring', 'Are most customers on recurring contracts?'),
@@ -89,7 +89,7 @@ export const INDUSTRIES = [
   },
   {
     id: 'pest-control', name: 'Pest control', group: 'home',
-    keyServices: ['lsa', 'ppc', 'seo', 'email-sms', 'reputation'],
+    keyServices: ['lsa', 'ppc', 'seo', 'email', 'reputation'],
     questions: [
       q('pc_pests', 'Main pests and services', 'multi', { options: opts('general|General pests', 'termites|Termites', 'rodents|Rodents', 'bedbugs|Bed bugs', 'mosquito|Mosquito / tick', 'wildlife|Wildlife removal', 'commercial|Commercial accounts') }),
       yn('pc_recurring', 'Do you sell quarterly or monthly service plans?'),
@@ -137,7 +137,7 @@ export const INDUSTRIES = [
   },
   {
     id: 'pool-spa', name: 'Pool and spa', group: 'home',
-    keyServices: ['seo', 'ppc', 'email-sms', 'gbp', 'social'],
+    keyServices: ['seo', 'ppc', 'email', 'gbp', 'social'],
     questions: [
       q('pool_services', 'Services', 'multi', { options: opts('install|Pool / hot tub sales and installs', 'opening|Openings and closings', 'service|Weekly service', 'repair|Repairs', 'retail|Retail store / chemicals') }),
       yn('pool_showroom', 'Do you have a showroom?'),
@@ -195,7 +195,7 @@ export const INDUSTRIES = [
   },
   {
     id: 'snow-removal', name: 'Snow removal and plowing', group: 'home',
-    keyServices: ['seo', 'gbp', 'ppc', 'email-sms', 'automation'],
+    keyServices: ['seo', 'gbp', 'ppc', 'sms', 'automation'],
     questions: [
       q('sn_type', 'Residential, commercial, HOA?', 'multi', { options: opts('res|Residential', 'comm|Commercial lots', 'hoa|HOA / apartments', 'salt|Salting') }),
       q('sn_pricing', 'Per push, per season, or per event?', 'text'),
@@ -229,7 +229,7 @@ export const INDUSTRIES = [
   },
   {
     id: 'septic-well', name: 'Septic and well services', group: 'home',
-    keyServices: ['gbp', 'lsa', 'seo', 'email-sms', 'citations'],
+    keyServices: ['gbp', 'lsa', 'seo', 'email', 'citations'],
     questions: [
       q('sw_services', 'Services', 'multi', { options: opts('pumping|Septic pumping', 'install|Septic install', 'inspection|Inspections (real estate)', 'well-drill|Well drilling', 'well-pump|Well pumps', 'water-treatment|Water treatment') }),
       yn('sw_reminders', 'Do you remind customers when pumping is due?'),
@@ -254,7 +254,7 @@ export const INDUSTRIES = [
   // ---------------- Health and wellness ----------------
   {
     id: 'dental', name: 'Dentists', group: 'health',
-    keyServices: ['seo', 'gbp', 'ppc', 'reputation', 'email-sms', 'booking'],
+    keyServices: ['seo', 'gbp', 'ppc', 'reputation', 'email', 'booking'],
     questions: [
       q('dn_new_patients', 'New patients per month, and the goal', 'text'),
       q('dn_procedures', 'Procedures you want more of', 'multi', { options: opts('implants|Implants', 'invisalign|Clear aligners', 'cosmetic|Cosmetic / veneers', 'emergency|Emergency', 'family|Family / hygiene', 'sedation|Sedation') }),
@@ -281,7 +281,7 @@ export const INDUSTRIES = [
   },
   {
     id: 'chiropractic', name: 'Chiropractors', group: 'health',
-    keyServices: ['gbp', 'seo', 'reputation', 'email-sms', 'ppc', 'booking'],
+    keyServices: ['gbp', 'seo', 'reputation', 'email', 'ppc', 'booking'],
     questions: [
       q('ch_new_patients', 'New patients per month and goal', 'text'),
       q('ch_focus', 'Focus areas', 'multi', { options: opts('pain|Back / neck pain', 'auto|Auto injury', 'sports|Sports', 'prenatal|Prenatal / pediatric', 'wellness|Wellness care') }),
@@ -293,7 +293,7 @@ export const INDUSTRIES = [
   },
   {
     id: 'physical-therapy', name: 'Physical therapy', group: 'health',
-    keyServices: ['seo', 'gbp', 'referral', 'reputation', 'email-sms'],
+    keyServices: ['seo', 'gbp', 'referral', 'reputation', 'email'],
     questions: [
       q('pt_referral_mix', 'Physician referrals vs direct access', 'text'),
       q('pt_specialties', 'Specialties', 'multi', { options: opts('ortho|Orthopedic', 'sports|Sports', 'pelvic|Pelvic health', 'vestibular|Vestibular', 'neuro|Neuro') }),
@@ -304,7 +304,7 @@ export const INDUSTRIES = [
   },
   {
     id: 'med-spa', name: 'Med spas', group: 'health',
-    keyServices: ['social', 'ppc', 'email-sms', 'reputation', 'booking', 'seo'],
+    keyServices: ['social', 'ppc', 'email', 'reputation', 'booking', 'seo'],
     questions: [
       q('ms_services', 'Top treatments', 'multi', { options: opts('injectables|Botox / fillers', 'laser|Laser', 'body|Body contouring', 'facials|Facials / peels', 'iv|IV therapy', 'weight|Weight loss') }),
       yn('ms_membership', 'Do you sell memberships or packages?'),
@@ -316,7 +316,7 @@ export const INDUSTRIES = [
   },
   {
     id: 'optometry', name: 'Optometrists', group: 'health',
-    keyServices: ['gbp', 'seo', 'email-sms', 'booking', 'reputation'],
+    keyServices: ['gbp', 'seo', 'email', 'booking', 'reputation'],
     questions: [
       q('op_services', 'Services to grow', 'multi', { options: opts('exams|Eye exams', 'contacts|Contacts', 'dry-eye|Dry eye', 'myopia|Myopia control', 'eyewear|Designer eyewear') }),
       q('op_recall', 'How do you remind patients of annual exams?', 'text'),
@@ -327,7 +327,7 @@ export const INDUSTRIES = [
   },
   {
     id: 'veterinary', name: 'Veterinarians', group: 'health',
-    keyServices: ['gbp', 'seo', 'email-sms', 'reputation', 'booking', 'social'],
+    keyServices: ['gbp', 'seo', 'email', 'reputation', 'booking', 'social'],
     questions: [
       q('vt_type', 'General, emergency, specialty, mobile?', 'text'),
       yn('vt_new_clients', 'Are you accepting new clients right now?'),
@@ -352,7 +352,7 @@ export const INDUSTRIES = [
   },
   {
     id: 'audiology', name: 'Hearing and audiology clinics', group: 'health',
-    keyServices: ['seo', 'gbp', 'ppc', 'email-sms', 'reputation'],
+    keyServices: ['seo', 'gbp', 'ppc', 'email', 'reputation'],
     questions: [
       q('au_services', 'Services', 'multi', { options: opts('testing|Hearing tests', 'aids|Hearing aids', 'tinnitus|Tinnitus', 'pediatric|Pediatric') }),
       q('au_upgrade_cycle', 'How do you reach patients due for an upgrade?', 'text'),
@@ -390,7 +390,7 @@ export const INDUSTRIES = [
   },
   {
     id: 'family-estate-law', name: 'Family and estate law', group: 'pro',
-    keyServices: ['seo', 'gbp', 'content', 'lsa', 'reputation', 'email-sms'],
+    keyServices: ['seo', 'gbp', 'content', 'lsa', 'reputation', 'email'],
     questions: [
       q('fe_practice', 'Practice areas', 'multi', { options: opts('divorce|Divorce', 'custody|Custody', 'estate|Estate planning', 'probate|Probate', 'elder|Elder law', 'adoption|Adoption') }),
       yn('fe_flat_fee', 'Do you offer flat-fee services?'),
@@ -402,7 +402,7 @@ export const INDUSTRIES = [
   },
   {
     id: 'real-estate', name: 'Real estate agents and teams', group: 'pro',
-    keyServices: ['seo', 'social', 'email-sms', 'content', 'ppc', 'web'],
+    keyServices: ['seo', 'social', 'email', 'content', 'ppc', 'web'],
     questions: [
       q('re_focus', 'Buyers, sellers, investors, luxury, new construction?', 'multi', { options: opts('buyers|Buyers', 'sellers|Sellers / listings', 'investors|Investors', 'luxury|Luxury', 'new-construction|New construction', 'relocation|Relocation') }),
       q('re_database', 'Size of your contact database', 'text'),
@@ -416,7 +416,7 @@ export const INDUSTRIES = [
   // ---------------- Retail, auto and hospitality ----------------
   {
     id: 'auto-repair', name: 'Auto repair and body shops', group: 'local',
-    keyServices: ['gbp', 'seo', 'reputation', 'email-sms', 'ppc', 'booking'],
+    keyServices: ['gbp', 'seo', 'reputation', 'sms', 'ppc', 'booking'],
     questions: [
       q('ar_type', 'Mechanical, collision, or both?', 'single', { options: opts('mech|Mechanical', 'collision|Collision', 'both|Both') }),
       q('ar_specialty', 'Specialties (European, diesel, transmissions, EV, fleet)', 'text'),
@@ -429,7 +429,7 @@ export const INDUSTRIES = [
   },
   {
     id: 'fitness', name: 'Gyms and fitness studios', group: 'local',
-    keyServices: ['social', 'ppc', 'email-sms', 'referral', 'gbp'],
+    keyServices: ['social', 'ppc', 'email', 'referral', 'gbp'],
     questions: [
       q('fit_type', 'Type', 'single', { options: opts('gym|Gym', 'boutique|Boutique studio', 'crossfit|CrossFit / functional', 'martial|Martial arts', 'pt|Personal training', 'yoga|Yoga / pilates') }),
       q('fit_members', 'Members today and goal', 'text'),
@@ -442,7 +442,7 @@ export const INDUSTRIES = [
   },
   {
     id: 'boat-rv-dealers', name: 'Boat, RV and powersports dealers', group: 'local',
-    keyServices: ['ppc', 'seo', 'social', 'email-sms', 'web', 'competitive'],
+    keyServices: ['ppc', 'seo', 'social', 'email', 'web', 'competitive'],
     questions: [
       q('br_units', 'What do you sell?', 'multi', { options: opts('boats|Boats', 'rv|RVs / campers', 'atv|ATVs / side-by-sides', 'snowmobiles|Snowmobiles', 'motorcycles|Motorcycles', 'pwc|Personal watercraft') }),
       q('br_inventory_feed', 'Where does inventory live (dealer website provider, DMS)?', 'text'),
@@ -469,7 +469,7 @@ export const INDUSTRIES = [
   },
   {
     id: 'restaurants', name: 'Restaurants', group: 'local',
-    keyServices: ['gbp', 'social', 'email-sms', 'reputation', 'web'],
+    keyServices: ['gbp', 'social', 'sms', 'reputation', 'web'],
     questions: [
       q('rs_type', 'Concept', 'text'),
       q('rs_channels', 'Revenue channels', 'multi', { options: opts('dine-in|Dine-in', 'takeout|Takeout', 'delivery-apps|Delivery apps', 'catering|Catering', 'events|Private events') }),
@@ -482,7 +482,7 @@ export const INDUSTRIES = [
   },
   {
     id: 'salons', name: 'Salons and barbershops', group: 'local',
-    keyServices: ['gbp', 'social', 'booking', 'reputation', 'email-sms'],
+    keyServices: ['gbp', 'social', 'booking', 'reputation', 'sms'],
     questions: [
       q('sl_model', 'Commission, booth rental, or mix?', 'text'),
       q('sl_booking', 'Booking software (Vagaro, Square, Boulevard, Booksy...)', 'text'),
@@ -494,7 +494,7 @@ export const INDUSTRIES = [
   },
   {
     id: 'ecommerce', name: 'E-commerce brands', group: 'local',
-    keyServices: ['ecommerce', 'ppc', 'email-sms', 'social', 'analytics', 'web'],
+    keyServices: ['ecommerce', 'ppc', 'email', 'social', 'analytics', 'web'],
     questions: [
       q('eb_revenue', 'Monthly online revenue', 'money'),
       q('eb_roas', 'Current return on ad spend', 'text'),

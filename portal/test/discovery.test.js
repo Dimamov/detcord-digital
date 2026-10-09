@@ -5,7 +5,8 @@ import { MASTER } from '../src/shared/discovery/master.js';
 import { SERVICE_MODULES } from '../src/shared/discovery/services.js';
 import { INDUSTRIES } from '../src/shared/discovery/industries.js';
 import { RECOMMENDATIONS, INTAKE } from '../src/shared/discovery/playbook.js';
-import { SERVICES } from '../src/shared/services.js';
+import { SERVICES, serviceById } from '../src/shared/services.js';
+import { needsReview, termsFor } from '../src/shared/contract.js';
 import { computeResult } from '../src/shared/discovery/engine.js';
 
 describe('discovery content', () => {
@@ -66,5 +67,32 @@ describe('discovery flow', () => {
     expect(record.services.length).toBeGreaterThan(0);
     expect(record.tasks.some((t) => /Follow up|Prepare proposal/.test(t.title))).toBe(true);
     expect(record.client.status).toBe('prospect');
+  });
+});
+
+describe('service catalog', () => {
+  it('splits email and SMS marketing and retires email-sms without deleting it', async () => {
+    const ids = SERVICES.map((s) => s.id);
+    expect(ids).toEqual(expect.arrayContaining(['email', 'sms']));
+    expect(ids).not.toContain('email-sms');
+    expect(serviceById.email).toMatchObject({ name: 'Email marketing', category: 'convert' });
+    expect(serviceById.email.description).toMatch(/CAN-SPAM/);
+    expect(serviceById.sms).toMatchObject({ name: 'SMS marketing', category: 'convert' });
+    expect(serviceById['email-sms']).toMatchObject({ active: false, replacedBy: ['email', 'sms'] });
+    expect(SERVICE_MODULES['email-sms']).toBeUndefined();
+
+    const rows = Object.fromEntries((await env.DB.prepare("SELECT id, name, category, active FROM services WHERE id IN ('email','sms','email-sms')").all()).results.map((r) => [r.id, r]));
+    expect(rows.email).toMatchObject({ name: 'Email marketing', category: 'convert', active: 1 });
+    expect(rows.sms).toMatchObject({ name: 'SMS marketing', category: 'convert', active: 1 });
+    expect(rows['email-sms']).toMatchObject({ active: 0 });
+    const rep = await as('rep');
+    const catalog = (await (await rep.call('GET', '/api/services')).json()).services;
+    expect(catalog.filter((s) => s.active).map((s) => s.id)).toEqual(expect.arrayContaining(['email', 'sms']));
+    expect(catalog.find((s) => s.id === 'email-sms').active).toBe(0);
+
+    // No approved contract language yet: the agreement editor flags them for review and uses the generic line.
+    expect(needsReview('email')).toBe(true);
+    expect(needsReview('sms')).toBe(true);
+    expect(termsFor('email')).toBe(null);
   });
 });

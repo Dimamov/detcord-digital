@@ -175,6 +175,7 @@ export function parsePage(html, pageUrl) {
 
   const headings = {};
   for (const n of [1, 2, 3]) headings[`h${n}`] = blocks(noComments, `h${n}`).map((m) => stripTags(m[1])).filter(Boolean);
+  const layout = layoutHints(noComments, bodyOnly);
 
   return {
     title: (() => { const t = noComments.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i); return t ? decode(t[1]) : null; })(),
@@ -203,7 +204,48 @@ export function parsePage(html, pageUrl) {
     mapEmbed: iframes.some((s) => /google\.[a-z.]+\/maps|maps\.google|goo\.gl\/maps/i.test(s)) || /maps\.googleapis\.com\/maps\/api\/js/i.test(noComments),
     iframes: iframes.length,
     buttons,
+    layout,
     bytes: html.length,
+  };
+}
+
+// Words that make a link or button a call to action ("Call now", "Get a free quote", "Book online").
+export const CTA_RE = /\b(call|quote|estimate|book|schedul\w*|request|get started|appointment|order|reserve|consult\w*|sign up|apply)\b/i;
+
+// What the page's code says about layout, for the design checks. "Top" is the markup before the first H2 that follows
+// the H1 (the header and first section on most layouts), capped at the first 40% of the page. External stylesheets
+// aren't fetched, so font sizes only cover styles written into the page itself.
+function layoutHints(noComments, bodyOnly) {
+  const h1At = Math.max(0, bodyOnly.search(/<h1\b/i));
+  const h2 = /<h2\b/gi;
+  h2.lastIndex = h1At;
+  const nextH2 = h2.exec(bodyOnly)?.index ?? bodyOnly.length;
+  const top = bodyOnly.slice(0, Math.min(nextH2, Math.max(4000, Math.round(bodyOnly.length * 0.4))));
+  const clickables = (html) => [
+    ...blocks(html, 'a').map((m) => stripTags(m[1]) || attrs(m[0].match(/^<a\b[^>]*>/i)[0])['aria-label'] || ''),
+    ...blocks(html, 'button').map((m) => stripTags(m[1])),
+    ...tags(html, 'input').map(attrs).filter((i) => /^(submit|button)$/i.test(i.type || '')).map((i) => i.value || ''),
+  ].filter((t) => t && t.length <= 60);
+  const ctas = (list) => [...new Set(list.filter((t) => CTA_RE.test(t)))];
+
+  const navs = blocks(bodyOnly, 'nav');
+  const navLabels = navs.length ? [...new Set(navs.flatMap((m) => blocks(m[0], 'a').map((a) => stripTags(a[1]))).filter((t) => t && t.length <= 40))] : null;
+
+  const css = [...blocks(noComments, 'style').map((m) => m[1]), ...[...noComments.matchAll(/\sstyle\s*=\s*("[^"]*"|'[^']*')/gi)].map((m) => m[1])].join(';');
+  let smallFonts = 0;
+  for (const m of css.matchAll(/font-size\s*:\s*(\d+(?:\.\d+)?)(px|pt)\b/gi)) {
+    if ((m[2].toLowerCase() === 'pt' ? Number(m[1]) * 4 / 3 : Number(m[1])) < 12) smallFonts += 1;
+  }
+  const formFields = blocks(noComments, 'form').map((m) => tags(m[1], 'input').map(attrs).filter((i) => !['hidden', 'submit', 'button', 'search', 'image', 'reset'].includes((i.type || '').toLowerCase())).length
+    + tags(m[1], 'textarea').length + tags(m[1], 'select').length);
+
+  return {
+    topCtas: ctas(clickables(top)).slice(0, 5),
+    topTel: /<a\b[^>]*href\s*=\s*["']?tel:/i.test(top),
+    ctaTexts: ctas(clickables(bodyOnly)).slice(0, 6),
+    navLabels: navLabels && navLabels.slice(0, 40),
+    smallFonts,
+    maxFormFields: formFields.length ? Math.max(...formFields) : 0,
   };
 }
 
