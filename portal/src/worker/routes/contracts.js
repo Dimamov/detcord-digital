@@ -1,7 +1,7 @@
 // Service agreements: draft → send (Detcord signs, document frozen and hashed) → client e-signs → locked.
 // Signing also sets up the money side: deposit invoice, setup balance draft, active services, deal won.
 import { Hono } from 'hono';
-import { fail, now, newId, sha256, safeEqual, hashPassword, text, cents, readJson, logActivity, EMAIL_RE } from '../lib/util.js';
+import { fail, now, newId, sha256, safeEqual, hashPassword, text, cents, oneOf, readJson, logActivity, EMAIL_RE } from '../lib/util.js';
 import { requireUser, requireRole, requireClient, isStaff, clientScopeSql } from '../lib/auth.js';
 import { getSettings, nextNumber } from '../lib/settings.js';
 import { createInvoice } from '../lib/invoices.js';
@@ -11,6 +11,17 @@ import { renderContract, signingProblems, contractTotals, needsReview, SIGNING_S
 const r = new Hono();
 const DAY = 86400000;
 const originOf = (c) => c.env.PUBLIC_URL || new URL(c.req.url).origin;
+
+// The terms part of an agreement: what templates hold and what "blank" starts with. Parties are never terms.
+const BLANK_TERMS = { services: [], depositCents: null, paymentTerms: '', thirdParty: '', additional: '', paymentDays: 15, feedbackDays: 10 };
+const pickTerms = (d) => Object.fromEntries(Object.keys(BLANK_TERMS).map((k) => [k, d[k] ?? BLANK_TERMS[k]]));
+
+// Template terms with current catalog names; services removed from the catalog are dropped.
+async function templateTerms(db, data) {
+  const known = new Map((await db.prepare('SELECT id, name FROM services').all()).results.map((s) => [s.id, s.name]));
+  const terms = pickTerms(data);
+  return { ...terms, services: terms.services.filter((s) => known.has(s.serviceId)).map((s) => ({ ...s, name: known.get(s.serviceId) })) };
+}
 
 async function loadContract(c, id, { write = false } = {}) {
   const row = await c.env.DB.prepare('SELECT * FROM contracts WHERE id=?').bind(id).first();
@@ -32,7 +43,7 @@ function publicView(contract, user, company = {}) {
     out.problems = signingProblems(live);
     out.reviewServices = contract.data.services.filter((s) => needsReview(s.serviceId)).map((s) => s.name);
   } else {
-    delete out.created_by; delete out.void_reason;
+    delete out.created_by; delete out.void_reason; delete out.template_id; delete out.copied_from;
   }
   return out;
 }
@@ -47,7 +58,8 @@ const docInput = (contract, origin) => ({
 r.get('/clients/:id/contracts', async (c) => {
   const { user, client } = await requireClient(c, c.req.param('id'));
   const staff = isStaff(user);
-  const rows = (await c.env.DB.prepare(`SELECT id, number, title, status, version, issued_at, signed_at, signer_name, voided_at, created_at, updated_at, data
+  const rows = (await c.env.DB.prepare(`SELECT id, number, title, status, version, issued_at, signed_at, signer_name, voided_at, created_at, updated_at, data,
+    (SELECT COUNT(*) FROM contract_change_requests cr WHERE cr.contract_id=contracts.id AND cr.version=contracts.version) AS change_requests
     FROM contracts WHERE client_id=? ${staff ? '' : "AND (status IN ('sent','signed') OR (status='void' AND issued_at IS NOT NULL))"} ORDER BY created_at DESC`).bind(client.id).all()).results;
   return c.json({ contracts: rows.map(({ data, ...row }) => ({ ...row, totals: contractTotals(JSON.parse(data)) })) });
 });
@@ -64,42 +76,96 @@ r.get('/contracts', async (c) => {
 
 // ---- create ---------------------------------------------------------------
 
+// Parties always come from the client record and company settings, whatever the draft starts from.
+async function partiesFor(db, client, user) {
+  const [company, contact] = await Promise.all([
+    getSettings(db, 'company.'),
+    db.prepare('SELECT name, email FROM contacts WHERE client_id=? ORDER BY is_primary DESC, is_decision_maker DESC LIMIT 1').bind(client.id).first(),
+  ]);
+  const address = [client.address, [client.city, client.state].filter(Boolean).join(', '), client.zip].filter(Boolean).join(', ');
+  return {
+    providerName: company.legalName || '', providerAddress: company.address || '', providerEmail: company.email || 'info@detcorddigital.com',
+    providerSigner: company.signer || user.name,
+    clientLegalName: client.name, clientAddress: address, clientEmail: client.email || contact?.email || '',
+  };
+}
+
+async function insertDraft(db, { user, client, data, title, templateId = null, copiedFrom = null }) {
+  const deal = await db.prepare("SELECT d.id FROM deals d JOIN pipeline_stages ps ON ps.id=d.stage_id WHERE d.client_id=? AND ps.outcome='open' ORDER BY d.updated_at DESC LIMIT 1").bind(client.id).first();
+  const id = newId();
+  const t = now();
+  const number = await nextNumber(db, 'DD');
+  await db.prepare(`INSERT INTO contracts (id, client_id, deal_id, number, title, status, version, data, template_id, copied_from, created_by, created_at, updated_at)
+    VALUES (?,?,?,?,?,'draft',1,?,?,?,?,?,?)`).bind(id, client.id, deal?.id || null, number, title, JSON.stringify(data), templateId, copiedFrom, user.id, t, t).run();
+  return { id, number };
+}
+
+// Starts a draft from the client's selected services (default), an active template, or blank terms.
 r.post('/clients/:id/contracts', async (c) => {
   const { user, client } = await requireClient(c, c.req.param('id'), { write: true });
   const db = c.env.DB;
   const body = await readJson(c).catch(() => ({}));
-  const company = await getSettings(db, 'company.');
-  const [services, contact, deal] = await Promise.all([
-    db.prepare(`SELECT cs.service_id, s.name, COALESCE(cs.setup_cents, s.setup_cents) AS setup_cents, COALESCE(cs.monthly_cents, s.monthly_cents) AS monthly_cents
-      FROM client_services cs JOIN services s ON s.id=cs.service_id WHERE cs.client_id=? AND cs.status IN ('recommended','proposed','active') ORDER BY s.position`).bind(client.id).all(),
-    db.prepare('SELECT name, email FROM contacts WHERE client_id=? ORDER BY is_primary DESC, is_decision_maker DESC LIMIT 1').bind(client.id).first(),
-    db.prepare("SELECT d.id FROM deals d JOIN pipeline_stages ps ON ps.id=d.stage_id WHERE d.client_id=? AND ps.outcome='open' ORDER BY d.updated_at DESC LIMIT 1").bind(client.id).first(),
-  ]);
-  const address = [client.address, [client.city, client.state].filter(Boolean).join(', '), client.zip].filter(Boolean).join(', ');
-  const data = {
-    providerName: company.legalName || '', providerAddress: company.address || '', providerEmail: company.email || 'info@detcorddigital.com',
-    providerSigner: company.signer || user.name,
-    clientLegalName: client.name, clientAddress: address, clientEmail: client.email || contact?.email || '',
-    services: services.results.map((s) => ({ serviceId: s.service_id, name: s.name, setupCents: s.setup_cents, monthlyCents: s.monthly_cents, scope: '' })),
-    depositCents: null, monthlyStart: '', paymentTerms: '', thirdParty: '', additional: '',
-    paymentDays: 15, feedbackDays: 10, attachments: [],
-  };
-  const id = newId();
-  const t = now();
-  const number = await nextNumber(db, 'DD');
+  const from = oneOf(body.from ?? 'services', ['services', 'template', 'blank'], 'Starting point');
+  let terms = { ...BLANK_TERMS };
+  let template = null;
+  if (from === 'services') {
+    const services = await db.prepare(`SELECT cs.service_id, s.name, COALESCE(cs.setup_cents, s.setup_cents) AS setup_cents, COALESCE(cs.monthly_cents, s.monthly_cents) AS monthly_cents
+      FROM client_services cs JOIN services s ON s.id=cs.service_id WHERE cs.client_id=? AND cs.status IN ('recommended','proposed','active') ORDER BY s.position`).bind(client.id).all();
+    terms.services = services.results.map((s) => ({ serviceId: s.service_id, name: s.name, setupCents: s.setup_cents, monthlyCents: s.monthly_cents, scope: '' }));
+  } else if (from === 'template') {
+    template = await db.prepare('SELECT * FROM contract_templates WHERE id=? AND archived_at IS NULL').bind(String(body.templateId || '')).first();
+    if (!template) fail(404, 'Template not found.');
+    terms = await templateTerms(db, JSON.parse(template.data));
+  }
+  const data = { ...(await partiesFor(db, client, user)), ...terms, monthlyStart: '', attachments: [] };
   const title = text(body.title, { max: 160 }) || `${client.name} marketing services agreement`;
-  await db.prepare(`INSERT INTO contracts (id, client_id, deal_id, number, title, status, version, data, created_by, created_at, updated_at)
-    VALUES (?,?,?,?,?,'draft',1,?,?,?,?)`).bind(id, client.id, deal?.id || null, number, title, JSON.stringify(data), user.id, t, t).run();
-  await logActivity(db, { clientId: client.id, actorId: user.id, kind: 'contract', summary: `Started agreement ${number}` });
+  const { id, number } = await insertDraft(db, { user, client, data, title, templateId: template?.id });
+  await logActivity(db, { clientId: client.id, actorId: user.id, kind: 'contract', summary: `Started agreement ${number}${template ? ` from template ${template.name}` : from === 'blank' ? ' (blank)' : ''}` });
   return c.json({ id, number }, 201);
+});
+
+// Copies terms, services and parties into a new draft. Signatures, frozen documents and hashes never carry over.
+async function duplicate(c, { user, client, contract }) {
+  const db = c.env.DB;
+  // Only files that are still shared with the client stay attached.
+  const attachments = [];
+  for (const a of contract.data.attachments || []) {
+    if (await db.prepare("SELECT 1 FROM media WHERE id=? AND client_id=? AND deleted_at IS NULL AND visibility='shared'").bind(a.id, client.id).first()) attachments.push(a);
+  }
+  const copy = await insertDraft(db, { user, client, data: { ...contract.data, attachments }, title: contract.title, templateId: contract.template_id || null, copiedFrom: contract.id });
+  await logActivity(db, { clientId: client.id, actorId: user.id, kind: 'contract', summary: `Duplicated ${contract.number} as new draft ${copy.number}` });
+  return copy;
+}
+
+r.post('/contracts/:id/duplicate', async (c) => {
+  const { user, client, contract } = await loadContract(c, c.req.param('id'), { write: true });
+  return c.json(await duplicate(c, { user, client, contract }), 201);
+});
+
+// Answering a change request in one step: void the sent version and open an editable copy.
+// Reps may do this for sent agreements (they can already withdraw those); voiding a signed one stays admin-only.
+r.post('/contracts/:id/redraft', async (c) => {
+  const { user, client, contract } = await loadContract(c, c.req.param('id'), { write: true });
+  if (contract.status !== 'sent') fail(409, 'Only an agreement waiting for signature can be voided and redrafted.');
+  const db = c.env.DB;
+  const reason = 'Changes requested';
+  const t = now();
+  const res = await db.prepare("UPDATE contracts SET status='void', voided_at=?, void_reason=?, updated_at=? WHERE id=? AND status='sent'").bind(t, reason, t, contract.id).run();
+  if (!res.meta.changes) fail(409, 'This agreement changed since you opened it. Reload and try again.');
+  await logActivity(db, { clientId: client.id, actorId: user.id, kind: 'contract', summary: `Voided ${contract.number}: ${reason}` });
+  return c.json(await duplicate(c, { user, client, contract }), 201);
 });
 
 // ---- read -----------------------------------------------------------------
 
 r.get('/contracts/:id', async (c) => {
   const { user, client, contract } = await loadContract(c, c.req.param('id'));
-  const company = isStaff(user) ? await getSettings(c.env.DB, 'company.') : {};
-  return c.json({ contract: publicView(contract, user, company), client: { id: client.id, name: client.name } });
+  const db = c.env.DB;
+  const company = isStaff(user) ? await getSettings(db, 'company.') : {};
+  const changeRequests = (await db.prepare('SELECT id, version, note, author_id, author_name, created_at FROM contract_change_requests WHERE contract_id=? ORDER BY created_at DESC').bind(contract.id).all()).results
+    .map(({ author_id, ...cr }) => (isStaff(user) ? { ...cr, author_id } : cr));
+  const copiedFrom = isStaff(user) && contract.copied_from ? await db.prepare('SELECT id, number FROM contracts WHERE id=?').bind(contract.copied_from).first() : null;
+  return c.json({ contract: publicView(contract, user, company), client: { id: client.id, name: client.name }, changeRequests, copiedFrom });
 });
 
 r.get('/contracts/:id/document', async (c) => {
@@ -193,6 +259,103 @@ r.delete('/contracts/:id', async (c) => {
   await c.env.DB.prepare('DELETE FROM contracts WHERE id=?').bind(contract.id).run();
   await logActivity(c.env.DB, { clientId: contract.client_id, actorId: user.id, kind: 'contract', summary: `Deleted draft ${contract.number}` });
   return c.json({ ok: true });
+});
+
+// ---- templates (packages) ---------------------------------------------------
+
+// Terms from a request body, cleaned exactly like agreement edits. Parties and attachments are ignored.
+async function cleanTerms(db, prev, body) {
+  const { services, deposit, paymentTerms, thirdParty, additional, paymentDays, feedbackDays } = body;
+  return pickTerms(await cleanData(db, null, prev, { services, deposit, paymentTerms, thirdParty, additional, paymentDays, feedbackDays }));
+}
+
+const templateView = ({ data, ...row }) => { const d = JSON.parse(data); return { ...row, data: d, totals: contractTotals(d) }; };
+
+// Reps and admins see active templates; admins can ask for archived ones too.
+r.get('/contract-templates', async (c) => {
+  const user = requireRole(c, 'admin', 'rep');
+  const archived = user.role === 'admin' && c.req.query('archived') === '1';
+  const rows = (await c.env.DB.prepare(`SELECT id, name, description, data, archived_at, updated_at FROM contract_templates
+    ${archived ? '' : 'WHERE archived_at IS NULL'} ORDER BY archived_at IS NOT NULL, name COLLATE NOCASE`).all()).results;
+  return c.json({ templates: rows.map(templateView) });
+});
+
+r.post('/contract-templates', async (c) => {
+  const user = requireRole(c, 'admin');
+  const db = c.env.DB;
+  const body = await readJson(c);
+  const name = text(body.name, { max: 120, required: true, label: 'Template name' });
+  const data = await cleanTerms(db, BLANK_TERMS, body);
+  const id = newId();
+  const t = now();
+  await db.prepare('INSERT INTO contract_templates (id, name, description, data, created_by, created_at, updated_by, updated_at) VALUES (?,?,?,?,?,?,?,?)')
+    .bind(id, name, text(body.description, { max: 500 }), JSON.stringify(data), user.id, t, user.id, t).run();
+  await logActivity(db, { actorId: user.id, kind: 'contract', summary: `Created agreement template ${name}` });
+  return c.json({ id }, 201);
+});
+
+r.put('/contract-templates/:id', async (c) => {
+  const user = requireRole(c, 'admin');
+  const db = c.env.DB;
+  const row = await db.prepare('SELECT * FROM contract_templates WHERE id=?').bind(c.req.param('id')).first();
+  if (!row) fail(404, 'Template not found.');
+  const body = await readJson(c);
+  const name = body.name !== undefined ? text(body.name, { max: 120, required: true, label: 'Template name' }) : row.name;
+  const description = body.description !== undefined ? text(body.description, { max: 500 }) : row.description;
+  const data = await cleanTerms(db, JSON.parse(row.data), body);
+  const archivedAt = body.archived === undefined ? row.archived_at : body.archived ? (row.archived_at || now()) : null;
+  await db.prepare('UPDATE contract_templates SET name=?, description=?, data=?, archived_at=?, updated_by=?, updated_at=? WHERE id=?')
+    .bind(name, description, JSON.stringify(data), archivedAt, user.id, now(), row.id).run();
+  if (!!archivedAt !== !!row.archived_at) await logActivity(db, { actorId: user.id, kind: 'contract', summary: `${archivedAt ? 'Archived' : 'Restored'} agreement template ${name}` });
+  return c.json({ ok: true });
+});
+
+// "Save as template" from an agreement: copies its terms, never the client's parties or attachments.
+r.post('/contracts/:id/template', async (c) => {
+  const user = requireRole(c, 'admin');
+  const { contract } = await loadContract(c, c.req.param('id'));
+  const db = c.env.DB;
+  const body = await readJson(c);
+  const name = text(body.name, { max: 120, required: true, label: 'Template name' });
+  const id = newId();
+  const t = now();
+  await db.prepare('INSERT INTO contract_templates (id, name, description, data, created_by, created_at, updated_by, updated_at) VALUES (?,?,?,?,?,?,?,?)')
+    .bind(id, name, text(body.description, { max: 500 }), JSON.stringify(pickTerms(contract.data)), user.id, t, user.id, t).run();
+  await logActivity(db, { clientId: contract.client_id, actorId: user.id, kind: 'contract', summary: `Saved ${contract.number} as agreement template ${name}` });
+  return c.json({ id }, 201);
+});
+
+// ---- change requests (client) ------------------------------------------------
+
+// The client asks for changes to a sent agreement. The frozen document stays as it is.
+r.post('/contracts/:id/changes', async (c) => {
+  const { user, client, contract } = await loadContract(c, c.req.param('id'));
+  if (user.role !== 'client') fail(403, 'Only the client can ask for changes to their agreement.');
+  if (contract.status !== 'sent') fail(409, 'This agreement is no longer open for changes.');
+  const db = c.env.DB;
+  const body = await readJson(c);
+  const note = text(body.note, { max: 4000, required: true, label: 'What you would like changed' });
+  const id = newId();
+  const t = now();
+  await db.prepare('INSERT INTO contract_change_requests (id, contract_id, version, note, author_id, author_name, created_at) VALUES (?,?,?,?,?,?,?)')
+    .bind(id, contract.id, contract.version, note, user.id, user.name, t).run();
+  await logActivity(db, { clientId: client.id, actorId: user.id, kind: 'contract', internal: false, summary: `${user.name} asked for changes to agreement ${contract.number}` });
+
+  // Tell the client's reps and the admins. Without email they still see it on the agreement page.
+  const staff = (await db.prepare(`SELECT DISTINCT u.email, u.name FROM users u WHERE u.status='active' AND (u.role='admin' OR (u.role='rep' AND u.id IN (SELECT user_id FROM assignments WHERE client_id=?)))`).bind(client.id).all()).results;
+  const origin = originOf(c);
+  const deliveries = [];
+  for (const s of staff) {
+    const mail = renderEmail({
+      origin,
+      heading: `${client.name} asked for changes to ${contract.number}`,
+      paragraphs: [`${user.name} wrote:`, note, 'The sent version stays as it is. To change it, void and redraft the agreement, then send the new version.'],
+      button: { label: 'Open the agreement', url: `${origin}/contracts/${contract.id}` },
+    });
+    const res = await sendEmail(c.env, { to: s.email, subject: `Changes requested: ${contract.title}`, ...mail, idempotencyKey: `contract-changes/${id}/${s.email}` });
+    deliveries.push({ email: s.email, status: res.status });
+  }
+  return c.json({ ok: true, id, emailed: deliveries.filter((d) => d.status === 'sent').length }, 201);
 });
 
 // ---- send -----------------------------------------------------------------

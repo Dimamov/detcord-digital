@@ -73,6 +73,12 @@ export async function requireClient(c, clientId, { staffOnly = false, write = fa
   return { user, client };
 }
 
+// Adds a client login to a business. The first login of a business without an owner becomes its owner.
+export function addMember(db, clientId, userId) {
+  return db.prepare(`INSERT INTO client_members (client_id, user_id, is_owner, created_at)
+    VALUES (?,?, NOT EXISTS (SELECT 1 FROM client_members WHERE client_id=? AND is_owner=1), ?)`).bind(clientId, userId, clientId, now());
+}
+
 // SQL fragment limiting a clients query to what this user may see. Use with alias `cl`.
 export function clientScopeSql(user) {
   if (user.role === 'admin') return { sql: '1=1', binds: [] };

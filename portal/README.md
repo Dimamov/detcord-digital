@@ -165,6 +165,41 @@ Admins can draft last month's report for every active client from **Settings →
 clients per request (two with Claude, ten without) to stay inside Workers limits, shows progress, skips clients that
 already have a report for that month, and never shares anything.
 
+## Agreements
+
+A new agreement starts from the client's selected services (the default), from an agreement template, or blank.
+Admins manage templates in **Settings → Agreement templates** (services, prices, scope, deposit and payment terms)
+or with **Save as template** on a draft; templates never hold a client's parties or files, and archived ones can't
+start new agreements. Staff can **Duplicate** any agreement into a new draft with a new number (signatures, frozen
+documents and hashes are never copied). A client can **Ask for changes** on an agreement waiting for their signature:
+the note is logged, shown to staff on the agreement, and emailed to the client's reps and admins when email is set
+up. The sent document never changes; staff use **Void and redraft**, which voids it with "Changes requested" and
+opens an editable copy. Reps can do that for sent agreements; voiding a signed one stays admin-only. The editor lists
+everything that blocks sending, each linked to the field (or to Settings → Company) that fixes it.
+
+## Client self-service
+
+Clients have a **Business** page (`/business`). With access to more than one business, they pick which one at the top,
+and every change applies only to that one.
+
+- **Business details:** clients edit phone, public email, website and address. The business name, status and industry
+  stay with staff ("ask your Detcord team"). Each change is logged with old and new values in the client's activity.
+- **Team logins:** each business has owners (`client_members.is_owner`; migration 0014 made the earliest login of each
+  business its owner, and the first login staff add to a business without one becomes its owner). Owners invite
+  teammates by name and email (a new client login with the usual one-time setup link, or an existing client login added
+  to this business), resend invites, remove teammates and make someone an owner. A business always keeps at least one
+  owner. Emails that belong to staff or turned-off logins are refused with the same neutral message. Owners never see a
+  setup link, even when email isn't configured; staff do. Invites and resends are limited to 20 a day per business.
+  Other teammates see the list read-only. Staff set the owner flag from the client record's **Portal access** tab.
+- **Services:** clients see their active services and can **Request a service** from the active catalog (names and
+  descriptions only, never prices) with a note. That creates a service request (new, quoted, added, declined), a task
+  and an email for each assigned rep (or every admin when nobody is assigned), and an activity entry. Staff update it
+  from the **Service requests** card on the client's Overview; marking it added changes nothing else.
+- **Agreements:** the agreements sent to the client, linking to the agreement page, with ones waiting for a signature
+  highlighted.
+
+On phones, a nav with more than six items shows the first five and a **More** sheet with the rest.
+
 ## Security rules the code enforces
 
 - Every API route checks the role and the client scope on the server. A rep sees only assigned clients,

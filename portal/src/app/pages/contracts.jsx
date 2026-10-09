@@ -10,14 +10,13 @@ export const ContractBadge = ({ status }) => <span class={`badge ${STATUS[status
 // Client record tab: list of agreements plus "New agreement".
 export function ContractsTab({ clientId, user }) {
   const { loading, data, error, reload } = useLoad(`/clients/${clientId}/contracts`, [clientId]);
-  const create = useAction();
+  const [starting, setStarting] = useState(false);
   if (loading) return <Loading />;
   if (error) return <ErrorBox error={error} retry={reload} />;
-  const start = () => create.run(async () => { const { id } = await api('POST', `/clients/${clientId}/contracts`, {}); navigate(`/contracts/${id}`); });
   return (
     <section class="card">
-      <div class="row between mb"><h2 style="margin:0">Agreements</h2>{user.role !== 'client' && <button class="btn" onClick={start} disabled={create.busy}><Icon name="plus" />New agreement</button>}</div>
-      {create.error && <div class="alert bad mb">{create.error}</div>}
+      <div class="row between mb"><h2 style="margin:0">Agreements</h2>{user.role !== 'client' && <button class="btn" onClick={() => setStarting(true)}><Icon name="plus" />New agreement</button>}</div>
+      {starting && <NewAgreement clientId={clientId} onClose={() => setStarting(false)} />}
       {!data.contracts.length ? <Empty title="No agreements yet">{user.role !== 'client' ? 'Start one: services, prices and recommended scope are filled in from the discovery.' : 'Agreements from Detcord appear here when they are ready to sign.'}</Empty> : (
         <div class="list">
           {data.contracts.map((ct) => (
@@ -31,6 +30,7 @@ export function ContractsTab({ clientId, user }) {
                 <div>{money(ct.totals.setup)} one-time</div>
                 <div class="muted">{money(ct.totals.monthly)}/mo</div>
               </div>
+              {user.role !== 'client' && ct.status === 'sent' && ct.change_requests > 0 && <span class="badge bad">Changes requested</span>}
               <ContractBadge status={ct.status} />
             </a>
           ))}
@@ -40,14 +40,58 @@ export function ContractsTab({ clientId, user }) {
   );
 }
 
+// Choose where a new draft starts. Parties always come from the client record.
+function NewAgreement({ clientId, onClose }) {
+  const [from, setFrom] = useState('services');
+  const [templateId, setTemplateId] = useState('');
+  const templates = useLoad('/contract-templates');
+  const create = useAction();
+  const list = templates.data?.templates || [];
+  const start = () => create.run(async () => {
+    const { id } = await api('POST', `/clients/${clientId}/contracts`, { from, templateId: from === 'template' ? templateId : undefined });
+    navigate(`/contracts/${id}`);
+  });
+  const option = (value, title, help) => (
+    <label class="check"><input type="radio" name="from" checked={from === value} onChange={() => setFrom(value)} /><span><strong>{title}</strong><div class="small muted">{help}</div></span></label>
+  );
+  return (
+    <Dialog title="New agreement" onClose={onClose} footer={<><button class="btn ghost" onClick={onClose}>Cancel</button><button class="btn" disabled={create.busy || (from === 'template' && !templateId)} onClick={start}>Start draft</button></>}>
+      <div class="stack">
+        {option('services', 'From this client’s services', 'Services and prices chosen in the discovery and on the client record.')}
+        {option('template', 'From a template', 'A package set up in Settings: services, prices, scope and payment terms.')}
+        {from === 'template' && (
+          templates.loading ? <Loading /> : list.length ? (
+            <select class="select" value={templateId} onChange={(e) => setTemplateId(e.target.value)} aria-label="Template">
+              <option value="">Choose a template…</option>
+              {list.map((t) => <option value={t.id}>{t.name} · {money(t.totals.setup)} one-time, {money(t.totals.monthly)}/mo</option>)}
+            </select>
+          ) : <p class="small muted" style="margin:0">No templates yet. Admins add them in Settings → Agreement templates.</p>
+        )}
+        {option('blank', 'Blank agreement', 'No services or prices. Add everything by hand.')}
+        <p class="small faint" style="margin:0">Client name, address and notice email are filled in from the client record either way.</p>
+      </div>
+      {create.error && <div class="alert bad mt">{create.error}</div>}
+    </Dialog>
+  );
+}
+
 export function ContractPage({ id, user }) {
   const { loading, data, error, reload } = useLoad(`/contracts/${id}`, [id]);
   if (loading) return <div class="page"><Loading /></div>;
   if (error) return <div class="page"><ErrorBox error={error} retry={reload} /></div>;
   if (user.role === 'client') return <ClientContract data={data} reload={reload} />;
-  if (data.contract.status === 'draft') return <ContractEditor data={data} user={user} reload={reload} />;
-  return <StaffContractView data={data} user={user} reload={reload} />;
+  if (data.contract.status === 'draft') return <ContractEditor key={data.contract.id} data={data} user={user} reload={reload} />;
+  return <StaffContractView key={data.contract.id} data={data} user={user} reload={reload} />;
 }
+
+// Any agreement staff can see can be copied into a new draft. Signatures and frozen documents never carry over.
+async function duplicateContract(contract) {
+  const { id, number } = await api('POST', `/contracts/${contract.id}/duplicate`);
+  toast(`New draft ${number} created from ${contract.number}.`);
+  navigate(`/contracts/${id}`);
+}
+
+const CopiedFrom = ({ copiedFrom }) => copiedFrom && <div class="small muted">Copied from <a href={`/contracts/${copiedFrom.id}`}>{copiedFrom.number}</a>.</div>;
 
 function DocFrame({ id, version, tall = false }) {
   return <iframe class="doc-frame" style={tall ? 'height:78vh' : ''} title="Agreement document" src={`/api/contracts/${id}/document?v=${version}-${Date.now()}`} />;
@@ -81,6 +125,42 @@ function toForm(ct) {
 }
 const centsOf = (v) => (v === '' || v == null || Number.isNaN(Number(String(v).replace(/[$,]/g, ''))) ? null : Math.round(Number(String(v).replace(/[$,]/g, '')) * 100));
 
+// Where each sending problem (from signingProblems) is fixed: Settings → Company, or a field in the editor.
+const PROBLEM_FIELDS = {
+  'Who signs for Detcord': 'f-providerSigner', 'Client’s legal business name': 'f-clientLegalName', 'Client’s address': 'f-clientAddress',
+  'Client’s notice email': 'f-clientEmail', 'At least one service': 'f-add-service', 'When monthly billing starts': 'f-monthlyStart',
+  'Deposit is larger than the first invoice total': 'f-deposit',
+};
+function problemTarget(p, services) {
+  if (p.includes('(Settings → Company)')) return { href: '/settings?tab=company' };
+  if (PROBLEM_FIELDS[p]) return { id: PROBLEM_FIELDS[p] };
+  const svc = (prefix, field) => {
+    if (!p.startsWith(prefix)) return null;
+    const s = services.find((x) => p.startsWith(`${prefix}${x.name}`));
+    return s ? { id: `f-svc-${s.serviceId}-${field(s)}` } : null;
+  };
+  // Prices point at whichever price is still empty.
+  return svc('Both prices for ', (s) => (centsOf(s.setup) == null ? 'setup' : 'monthly')) || svc('Scope for ', () => 'scope') || {};
+}
+function goToField(id) {
+  const el = document.getElementById(id) || (id === 'f-add-service' && document.getElementById('f-services'));
+  if (!el) return;
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  el.focus?.({ preventScroll: true });
+}
+function ProblemList({ problems, services, user }) {
+  return (
+    <ul class="small" style="margin:6px 0 0;padding-left:18px">
+      {problems.map((p) => {
+        const t = problemTarget(p, services);
+        if (t.href) return <li>{user.role === 'admin' ? <a href={t.href}>{p}</a> : <>{p} <span class="faint">(an admin sets this)</span></>}</li>;
+        if (t.id) return <li><a href={`#${t.id}`} onClick={(e) => { e.preventDefault(); goToField(t.id); }}>{p}</a></li>;
+        return <li>{p}</li>;
+      })}
+    </ul>
+  );
+}
+
 function ContractEditor({ data, user, reload }) {
   const { contract, client } = data;
   const [form, setForm] = useState(() => toForm(contract));
@@ -89,6 +169,7 @@ function ContractEditor({ data, user, reload }) {
   const [preview, setPreview] = useState(false);
   const [picker, setPicker] = useState(false);
   const [problems, setProblems] = useState(null);
+  const [tried, setTried] = useState(false);
   const catalog = useLoad('/services');
   const timer = useRef();
   const send = useAction();
@@ -99,6 +180,7 @@ function ContractEditor({ data, user, reload }) {
       const body = { ...f, attachments: f.attachments.map((a) => a.id), services: f.services.map(({ serviceId, setup, monthly, scope }) => ({ serviceId, setup, monthly, scope })) };
       const res = await api('PATCH', `/contracts/${contract.id}`, body);
       setSaved(res.contract);
+      setProblems(null);
       setState('saved');
     } catch (e) { setState('error'); toast(e.message, 'bad'); }
   };
@@ -122,10 +204,17 @@ function ContractEditor({ data, user, reload }) {
       toast(res.noLogins ? 'Sent. This client has no portal login yet: invite them from Portal access so they can sign.' : 'Sent for signature. The client was emailed.');
       reload();
     } catch (e) {
-      if (e.data?.problems) { setProblems(e.data.problems); throw new Error('A few details are missing before this can be sent.'); }
+      // Listed in the banner below with links to each field, not as a bare error.
+      if (e.data?.problems) { setProblems(e.data.problems); setTried(true); return; }
       throw e;
     }
   });
+  const copy = () => send.run(async () => { clearTimeout(timer.current); await save(form); await duplicateContract(saved); });
+  const saveTemplate = () => {
+    const name = prompt('Name this template (e.g. Local SEO starter). It copies services, prices, scope and payment terms, not this client’s details or files.');
+    if (!name) return;
+    send.run(async () => { clearTimeout(timer.current); await save(form); await api('POST', `/contracts/${contract.id}/template`, { name }); toast(`Template “${name}” saved. Find it in Settings → Agreement templates.`); });
+  };
   const remove = async () => {
     if (!confirm('Delete this draft agreement?')) return;
     try { await api('DELETE', `/contracts/${contract.id}`); navigate(`/clients/${client.id}?tab=contracts`); } catch (e) { toast(e.message, 'bad'); }
@@ -140,12 +229,18 @@ function ContractEditor({ data, user, reload }) {
         <button class="btn" onClick={doSend} disabled={send.busy}><Icon name="pen" />Send for signature</button>
       </Head>
       {send.error && <div class="alert bad mb">{send.error}</div>}
+      {blocking?.length > 0 && (
+        <div class={`alert ${tried ? 'bad' : 'warn'} mb`}>
+          <strong>{tried ? 'A few details are missing before this can be sent:' : 'Before this can be sent:'}</strong>
+          <ProblemList problems={blocking} services={form.services} user={user} />
+        </div>
+      )}
       <div class="grid main-side">
         <div class="stack">
           <section class="card">
-            <Field label="Agreement title"><input class="input" value={form.title} onInput={(e) => update({ title: e.target.value })} /></Field>
+            <Field label="Agreement title"><input id="f-title" class="input" value={form.title} onInput={(e) => update({ title: e.target.value })} /></Field>
           </section>
-          <section class="card">
+          <section class="card" id="f-services">
             <h2>Services, prices and scope</h2>
             <p class="small muted" style="margin-top:-6px">Enter 0 where a service has no one-time or monthly charge. Scope is what the client is buying: deliverables, quantities, cadence.</p>
             {form.services.map((s, i) => (
@@ -153,14 +248,14 @@ function ContractEditor({ data, user, reload }) {
                 <div class="row between"><strong>{s.name}</strong><button class="icon-btn" onClick={() => update({ services: form.services.filter((_, k) => k !== i) })} aria-label={`Remove ${s.name}`}><Icon name="trash" size={16} /></button></div>
                 {saved.reviewServices?.includes(s.name) && <div class="small" style="color:var(--warn)">New service wording: have it reviewed by counsel before relying on it.</div>}
                 <div class="form-grid mt" style="margin-top:8px">
-                  <Field label="One-time ($)"><input class="input" inputMode="decimal" value={s.setup} onInput={(e) => setService(i, { setup: e.target.value })} placeholder="0" /></Field>
-                  <Field label="Monthly ($)"><input class="input" inputMode="decimal" value={s.monthly} onInput={(e) => setService(i, { monthly: e.target.value })} placeholder="0" /></Field>
-                  <div class="full"><Field label="Scope"><textarea class="textarea" value={s.scope} onInput={(e) => setService(i, { scope: e.target.value })} placeholder="e.g. 10 service-area pages, monthly technical fixes, 2 blog posts per month, monthly report" /></Field></div>
+                  <Field label="One-time ($)"><input id={`f-svc-${s.serviceId}-setup`} class="input" inputMode="decimal" value={s.setup} onInput={(e) => setService(i, { setup: e.target.value })} placeholder="0" /></Field>
+                  <Field label="Monthly ($)"><input id={`f-svc-${s.serviceId}-monthly`} class="input" inputMode="decimal" value={s.monthly} onInput={(e) => setService(i, { monthly: e.target.value })} placeholder="0" /></Field>
+                  <div class="full"><Field label="Scope"><textarea id={`f-svc-${s.serviceId}-scope`} class="textarea" value={s.scope} onInput={(e) => setService(i, { scope: e.target.value })} placeholder="e.g. 10 service-area pages, monthly technical fixes, 2 blog posts per month, monthly report" /></Field></div>
                 </div>
               </div>
             ))}
             {available.length > 0 && (
-              <select class="select mt" value="" onChange={(e) => { const s = available.find((x) => x.id === e.target.value); if (s) update({ services: [...form.services, { serviceId: s.id, name: s.name, setup: dollars(s.setup_cents), monthly: dollars(s.monthly_cents), scope: '' }] }); }}>
+              <select id="f-add-service" class="select mt" value="" onChange={(e) => { const s = available.find((x) => x.id === e.target.value); if (s) update({ services: [...form.services, { serviceId: s.id, name: s.name, setup: dollars(s.setup_cents), monthly: dollars(s.monthly_cents), scope: '' }] }); }}>
                 <option value="">+ Add a service…</option>
                 {available.map((s) => <option value={s.id}>{s.name}</option>)}
               </select>
@@ -169,8 +264,8 @@ function ContractEditor({ data, user, reload }) {
           <section class="card">
             <h2>Payment</h2>
             <div class="form-grid">
-              <Field label="Deposit at signing ($)" help="credited against one-time fees"><input class="input" inputMode="decimal" value={form.deposit} onInput={(e) => update({ deposit: e.target.value })} placeholder="0" /></Field>
-              <Field label="Monthly billing starts"><input class="input" type="date" value={form.monthlyStart} onInput={(e) => update({ monthlyStart: e.target.value })} /></Field>
+              <Field label="Deposit at signing ($)" help="credited against one-time fees"><input id="f-deposit" class="input" inputMode="decimal" value={form.deposit} onInput={(e) => update({ deposit: e.target.value })} placeholder="0" /></Field>
+              <Field label="Monthly billing starts"><input id="f-monthlyStart" class="input" type="date" value={form.monthlyStart} onInput={(e) => update({ monthlyStart: e.target.value })} /></Field>
               <Field label="Invoices due (days)"><input class="input" type="number" min="0" max="90" value={form.paymentDays} onInput={(e) => update({ paymentDays: e.target.value })} /></Field>
               <Field label="Client feedback period (business days)"><input class="input" type="number" min="1" max="30" value={form.feedbackDays} onInput={(e) => update({ feedbackDays: e.target.value })} /></Field>
               <div class="full"><Field label="Payment schedule and milestones" help="leave blank for: deposit at signing, rest on completion, monthly in advance"><textarea class="textarea" value={form.paymentTerms} onInput={(e) => update({ paymentTerms: e.target.value })} /></Field></div>
@@ -180,10 +275,10 @@ function ContractEditor({ data, user, reload }) {
           <section class="card">
             <h2>Parties</h2>
             <div class="form-grid">
-              <Field label="Client legal name"><input class="input" value={form.clientLegalName} onInput={(e) => update({ clientLegalName: e.target.value })} /></Field>
-              <Field label="Client notice email"><input class="input" type="email" value={form.clientEmail} onInput={(e) => update({ clientEmail: e.target.value })} /></Field>
-              <div class="full"><Field label="Client address"><input class="input" value={form.clientAddress} onInput={(e) => update({ clientAddress: e.target.value })} /></Field></div>
-              <Field label="Signs for Detcord"><input class="input" value={form.providerSigner} onInput={(e) => update({ providerSigner: e.target.value })} /></Field>
+              <Field label="Client legal name"><input id="f-clientLegalName" class="input" value={form.clientLegalName} onInput={(e) => update({ clientLegalName: e.target.value })} /></Field>
+              <Field label="Client notice email"><input id="f-clientEmail" class="input" type="email" value={form.clientEmail} onInput={(e) => update({ clientEmail: e.target.value })} /></Field>
+              <div class="full"><Field label="Client address"><input id="f-clientAddress" class="input" value={form.clientAddress} onInput={(e) => update({ clientAddress: e.target.value })} /></Field></div>
+              <Field label="Signs for Detcord"><input id="f-providerSigner" class="input" value={form.providerSigner} onInput={(e) => update({ providerSigner: e.target.value })} /></Field>
               <div class="small muted" style="align-self:end">Detcord’s legal name and address come from Settings → Company.</div>
             </div>
           </section>
@@ -191,7 +286,7 @@ function ContractEditor({ data, user, reload }) {
             <h2>Additional scope and exceptions</h2>
             <textarea class="textarea" style="min-height:120px" value={form.additional} onInput={(e) => update({ additional: e.target.value })} placeholder="Anything agreed that changes the standard terms. Name the section it changes." />
             <div class="row between mt"><strong>Attached materials</strong><button class="btn sm secondary" onClick={() => setPicker(true)}><Icon name="image" />Attach files</button></div>
-            {form.attachments.length ? <div class="row mt" style="gap:8px">{form.attachments.map((a) => <span class="badge">{a.filename} <button class="linkish" onClick={() => update({ attachments: form.attachments.filter((x) => x.id !== a.id) })} aria-label={`Remove ${a.filename}`}>×</button></span>)}</div>
+            {form.attachments.length ? <div class="row mt" style="gap:8px">{form.attachments.map((a) => <span class="badge" style="white-space:normal;overflow-wrap:anywhere">{a.filename} <button class="linkish" onClick={() => update({ attachments: form.attachments.filter((x) => x.id !== a.id) })} aria-label={`Remove ${a.filename}`}>×</button></span>)}</div>
               : <p class="small muted">Logos, photos or materials the work relies on. Optional.</p>}
           </section>
         </div>
@@ -208,12 +303,17 @@ function ContractEditor({ data, user, reload }) {
           </section>
           <section class="card">
             <h3>{blocking?.length ? 'Before you send' : 'Ready to send'}</h3>
-            {blocking?.length ? <ul class="small" style="margin:0;padding-left:18px">{blocking.map((p) => <li>{p}</li>)}</ul>
+            {blocking?.length ? <ProblemList problems={blocking} services={form.services} user={user} />
               : <p class="small muted" style="margin:0">Sending signs for Detcord, freezes this version and emails the client a link to review and sign.</p>}
           </section>
           {saved.reviewServices?.length > 0 && <div class="alert warn small">Legal review: the wording for {saved.reviewServices.join(', ')} is new and has not been reviewed by counsel yet.</div>}
           <div class="alert info small">The general terms are Detcord’s existing Michigan agreement language. Generated agreements are not a substitute for legal advice.</div>
-          <button class="btn ghost sm" onClick={remove}><Icon name="trash" />Delete draft</button>
+          <CopiedFrom copiedFrom={data.copiedFrom} />
+          <div class="row" style="gap:6px">
+            <button class="btn ghost sm" onClick={copy} disabled={send.busy}><Icon name="copy" />Duplicate</button>
+            {user.role === 'admin' && <button class="btn ghost sm" onClick={saveTemplate} disabled={send.busy}><Icon name="doc" />Save as template</button>}
+            <button class="btn ghost sm" onClick={remove}><Icon name="trash" />Delete draft</button>
+          </div>
         </aside>
       </div>
       {preview && <Dialog title="Preview" onClose={() => setPreview(false)} footer={<a class="btn secondary" href={`/api/contracts/${contract.id}/document?download=1`}><Icon name="download" />Download</a>}><DocFrame id={contract.id} version={saved.version} tall /></Dialog>}
@@ -240,18 +340,42 @@ function StaffContractView({ data, user, reload }) {
     const { id } = await api('POST', `/clients/${client.id}/invoices`, { monthlyFromContract: contract.id });
     navigate(`/invoices/${id}`);
   });
+  const redraft = () => {
+    if (!confirm(`Void ${contract.number} (reason: Changes requested) and open an editable copy? The client can no longer sign this version.`)) return;
+    act.run(async () => {
+      const { id, number } = await api('POST', `/contracts/${contract.id}/redraft`);
+      toast(`${contract.number} voided. Make the changes in draft ${number}, then send it.`);
+      navigate(`/contracts/${id}`);
+    });
+  };
+  const requests = data.changeRequests || [];
+  const open = contract.status === 'sent' ? requests.filter((cr) => cr.version === contract.version) : [];
   return (
     <div class="page" style="max-width:1200px">
       <Head contract={contract} client={client}>
         <a class="btn secondary" href={`/api/contracts/${contract.id}/document?download=1`}><Icon name="download" />Download</a>
         {contract.status === 'sent' && <button class="btn secondary" onClick={withdraw} disabled={act.busy}><Icon name="pen" />Edit</button>}
+        {contract.status === 'sent' && <button class={`btn ${open.length ? '' : 'secondary'}`} onClick={redraft} disabled={act.busy}><Icon name="copy" />Void and redraft</button>}
+        <button class="btn secondary" onClick={() => act.run(() => duplicateContract(contract))} disabled={act.busy}><Icon name="copy" />Duplicate</button>
         {contract.status === 'signed' && contract.totals.monthly > 0 && <button class="btn" onClick={monthly} disabled={act.busy}><Icon name="plus" />Monthly invoice</button>}
         {user.role === 'admin' && contract.status !== 'void' && <button class="btn ghost" onClick={voidIt} disabled={act.busy}>Void</button>}
       </Head>
       {act.error && <div class="alert bad mb">{act.error}</div>}
+      {open.length > 0 && <div class="alert bad mb"><strong>{client.name} asked for changes.</strong> The sent version can’t change. Use <strong>Void and redraft</strong> to make an editable copy, then send it again.</div>}
       <div class="grid main-side">
         <DocFrame id={contract.id} version={contract.version} tall />
         <aside class="stack">
+          {requests.length > 0 && (
+            <section class="card">
+              <h3>Change requests</h3>
+              {requests.map((cr) => (
+                <div style="padding:8px 0;border-bottom:1px solid var(--line)">
+                  <div class="small muted">{cr.author_name} · {dateTime(cr.created_at)} · v{cr.version}</div>
+                  <div style="white-space:pre-wrap">{cr.note}</div>
+                </div>
+              ))}
+            </section>
+          )}
           <section class="card">
             <h3>Record</h3>
             <dl class="kv">
@@ -260,6 +384,7 @@ function StaffContractView({ data, user, reload }) {
               {contract.voided_at && <><dt>Voided</dt><dd>{dateTime(contract.voided_at)}<div class="small muted">{contract.void_reason}</div></dd></>}
               <dt>Document hash</dt><dd class="small" style="font-family:monospace">{contract.document_hash?.slice(0, 16)}…</dd>
             </dl>
+            <CopiedFrom copiedFrom={data.copiedFrom} />
           </section>
           <section class="card">
             <h3>Totals</h3>
@@ -314,6 +439,7 @@ function ClientContract({ data, reload }) {
               <p class="small faint" style="margin:0">Your typed name, account, time and a fingerprint of this exact document are recorded.</p>
             </form>
           )}
+          {contract.status === 'sent' && !done && <AskForChanges contract={contract} requests={data.changeRequests || []} reload={reload} />}
           {(done || contract.status === 'signed') && (
             <section class="card">
               <h2 style="margin-top:0">Signed. Thank you!</h2>
@@ -325,5 +451,129 @@ function ClientContract({ data, reload }) {
         </aside>
       </div>
     </div>
+  );
+}
+
+// Client: ask Detcord to change something before signing. The sent document itself never changes.
+function AskForChanges({ contract, requests, reload }) {
+  const [open, setOpen] = useState(false);
+  const [note, setNote] = useState('');
+  const act = useAction();
+  const submit = (e) => {
+    e.preventDefault();
+    act.run(async () => {
+      const res = await api('POST', `/contracts/${contract.id}/changes`, { note });
+      toast(res.emailed ? 'Sent. Your Detcord team was emailed and will follow up.' : 'Saved. Your Detcord team will see it in the portal and follow up.');
+      setNote(''); setOpen(false); reload();
+    });
+  };
+  const mine = requests.filter((cr) => cr.version === contract.version);
+  return (
+    <section class="card stack">
+      <div class="row between"><h3 style="margin:0">Need changes?</h3>{!open && <button class="btn sm secondary" onClick={() => setOpen(true)}><Icon name="pen" />Ask for changes</button>}</div>
+      {mine.map((cr) => <div class="small"><div class="muted">You asked {dateTime(cr.created_at)}{cr.author_name ? ` (${cr.author_name})` : ''}</div><div style="white-space:pre-wrap">{cr.note}</div></div>)}
+      {!open && !mine.length && <p class="small muted" style="margin:0">Tell Detcord what should be different. They’ll send you an updated agreement to sign.</p>}
+      {open && (
+        <form class="stack" onSubmit={submit}>
+          <Field label="What would you like changed?"><textarea class="textarea" required value={note} onInput={(e) => setNote(e.target.value)} placeholder="e.g. Start monthly billing in December, or drop the blog posts" /></Field>
+          {act.error && <div class="alert bad">{act.error}</div>}
+          <div class="row"><button class="btn" disabled={act.busy || !note.trim()}>Send request</button><button type="button" class="btn ghost" onClick={() => setOpen(false)}>Cancel</button></div>
+        </form>
+      )}
+    </section>
+  );
+}
+
+// ---- admin: agreement templates (Settings) -------------------------------------
+
+function toTemplateForm(t) {
+  const { services, deposit, paymentDays, feedbackDays, paymentTerms, thirdParty, additional } = toForm({ title: '', data: { ...t.data, attachments: [] } });
+  return { id: t.id, name: t.name || '', description: t.description || '', services, deposit, paymentDays, feedbackDays, paymentTerms, thirdParty, additional };
+}
+const BLANK_TEMPLATE = { services: [], depositCents: null, paymentDays: 15, feedbackDays: 10, paymentTerms: '', thirdParty: '', additional: '' };
+
+// Packages reps can start an agreement from. Terms only: parties always come from the client.
+export function TemplateSettings() {
+  const [archived, setArchived] = useState(false);
+  const { loading, data, error, reload } = useLoad(`/contract-templates${archived ? '?archived=1' : ''}`, [archived]);
+  const [edit, setEdit] = useState(null);
+  const act = useAction();
+  if (loading) return <Loading />;
+  if (error) return <ErrorBox error={error} retry={reload} />;
+  const setArchive = (t, value) => act.run(async () => { await api('PUT', `/contract-templates/${t.id}`, { archived: value }); toast(value ? `${t.name} archived.` : `${t.name} restored.`); reload(); });
+  return (
+    <div class="stack">
+      <div class="alert info">Templates hold services, prices, scope and payment terms. Starting an agreement from one copies those terms; the client’s legal name, address and email always come from the client record. The general terms never change.</div>
+      <section class="card">
+        {data.templates.length ? data.templates.map((t) => (
+          <div class="row" style="padding:10px 0;border-bottom:1px solid var(--line)">
+            <div style="flex:1;min-width:0">
+              <strong style={t.archived_at ? 'opacity:.5' : ''}>{t.name}</strong> {t.archived_at && <span class="badge">Archived</span>}
+              <div class="small muted">{t.data.services.map((s) => s.name).join(', ') || 'No services'} · {money(t.totals.setup)} one-time · {money(t.totals.monthly)}/mo{t.description ? ` · ${t.description}` : ''}</div>
+            </div>
+            <button class="btn sm ghost" onClick={() => setEdit(toTemplateForm(t))}>Edit</button>
+            <button class="btn sm ghost" disabled={act.busy} onClick={() => setArchive(t, !t.archived_at)}>{t.archived_at ? 'Restore' : 'Archive'}</button>
+          </div>
+        )) : <Empty title="No agreement templates yet">Add a package here, or open a draft agreement and use Save as template.</Empty>}
+        {act.error && <div class="alert bad mt">{act.error}</div>}
+        <div class="row mt">
+          <button class="btn secondary" onClick={() => setEdit(toTemplateForm({ data: BLANK_TEMPLATE }))}><Icon name="plus" />Add a template</button>
+          <label class="check small" style="margin-left:auto"><input type="checkbox" checked={archived} onChange={(e) => setArchived(e.target.checked)} />Show archived</label>
+        </div>
+      </section>
+      {edit && <TemplateDialog edit={edit} setEdit={setEdit} onSaved={() => { setEdit(null); reload(); }} />}
+    </div>
+  );
+}
+
+function TemplateDialog({ edit, setEdit, onSaved }) {
+  const catalog = useLoad('/services');
+  const act = useAction();
+  const set = (patch) => setEdit({ ...edit, ...patch });
+  const setService = (i, patch) => set({ services: edit.services.map((s, k) => (k === i ? { ...s, ...patch } : s)) });
+  const available = (catalog.data?.services || []).filter((s) => s.active && !edit.services.some((x) => x.serviceId === s.id));
+  const save = () => act.run(async () => {
+    const { id, ...body } = edit;
+    body.services = edit.services.map(({ serviceId, setup, monthly, scope }) => ({ serviceId, setup, monthly, scope }));
+    if (id) await api('PUT', `/contract-templates/${id}`, body); else await api('POST', '/contract-templates', body);
+    toast('Template saved.');
+    onSaved();
+  });
+  return (
+    <Dialog title={edit.id ? 'Edit template' : 'New agreement template'} onClose={() => setEdit(null)} footer={<><button class="btn ghost" onClick={() => setEdit(null)}>Cancel</button><button class="btn" disabled={act.busy || !edit.name.trim()} onClick={save}>Save</button></>}>
+      <div class="stack">
+        <div class="form-grid">
+          <Field label="Template name"><input class="input" value={edit.name} onInput={(e) => set({ name: e.target.value })} placeholder="e.g. Local SEO starter" /></Field>
+          <Field label="Note for the team" help="optional"><input class="input" value={edit.description} onInput={(e) => set({ description: e.target.value })} placeholder="Who this package fits" /></Field>
+        </div>
+        <h3 style="margin:0">Services, prices and scope</h3>
+        {edit.services.map((s, i) => (
+          <div class="svc-row">
+            <div class="row between"><strong>{s.name}</strong><button class="icon-btn" onClick={() => set({ services: edit.services.filter((_, k) => k !== i) })} aria-label={`Remove ${s.name}`}><Icon name="trash" size={16} /></button></div>
+            <div class="form-grid" style="margin-top:8px">
+              <Field label="One-time ($)"><input class="input" inputMode="decimal" value={s.setup} onInput={(e) => setService(i, { setup: e.target.value })} placeholder="0" /></Field>
+              <Field label="Monthly ($)"><input class="input" inputMode="decimal" value={s.monthly} onInput={(e) => setService(i, { monthly: e.target.value })} placeholder="0" /></Field>
+              <div class="full"><Field label="Scope"><textarea class="textarea" value={s.scope} onInput={(e) => setService(i, { scope: e.target.value })} placeholder="e.g. 10 service-area pages, monthly technical fixes, monthly report" /></Field></div>
+            </div>
+          </div>
+        ))}
+        {available.length > 0 && (
+          <select class="select" value="" onChange={(e) => { const s = available.find((x) => x.id === e.target.value); if (s) set({ services: [...edit.services, { serviceId: s.id, name: s.name, setup: dollars(s.setup_cents), monthly: dollars(s.monthly_cents), scope: '' }] }); }}>
+            <option value="">+ Add a service…</option>
+            {available.map((s) => <option value={s.id}>{s.name}</option>)}
+          </select>
+        )}
+        <h3 style="margin:0">Payment</h3>
+        <div class="form-grid">
+          <Field label="Deposit at signing ($)" help="credited against one-time fees"><input class="input" inputMode="decimal" value={edit.deposit} onInput={(e) => set({ deposit: e.target.value })} placeholder="0" /></Field>
+          <Field label="Invoices due (days)"><input class="input" type="number" min="0" max="90" value={edit.paymentDays} onInput={(e) => set({ paymentDays: e.target.value })} /></Field>
+          <Field label="Client feedback period (business days)"><input class="input" type="number" min="1" max="30" value={edit.feedbackDays} onInput={(e) => set({ feedbackDays: e.target.value })} /></Field>
+          <div class="full"><Field label="Payment schedule and milestones" help="leave blank for: deposit at signing, rest on completion, monthly in advance"><textarea class="textarea" value={edit.paymentTerms} onInput={(e) => set({ paymentTerms: e.target.value })} /></Field></div>
+          <div class="full"><Field label="Ad budget and third-party costs" help="leave blank: not included, need written approval"><input class="input" value={edit.thirdParty} onInput={(e) => set({ thirdParty: e.target.value })} /></Field></div>
+          <div class="full"><Field label="Additional scope and exceptions"><textarea class="textarea" value={edit.additional} onInput={(e) => set({ additional: e.target.value })} placeholder="Anything agreed that changes the standard terms. Name the section it changes." /></Field></div>
+        </div>
+      </div>
+      {act.error && <div class="alert bad mt">{act.error}</div>}
+    </Dialog>
   );
 }
