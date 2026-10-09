@@ -217,6 +217,8 @@ export function evaluate({ client, crawl, mobile, desktop, gbp, visual, now = Da
         : c.id === 'design' ? avg([mobile.scores.accessibility, mobile.scores.bestPractices]) : null;
       if (lh != null) score = Math.round(score * 0.6 + lh * 0.4);
     }
+    // Design is only scored with Google's tests: the code checks alone would overstate how good a page looks.
+    if (c.id === 'design' && !mobile?.ok && !desktop?.ok) score = null;
     if (!crawl.reachable && c.id !== 'local') score = c.id === 'tech' ? 0 : null;
     scores[c.id] = score;
   }

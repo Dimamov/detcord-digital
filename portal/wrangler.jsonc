@@ -17,6 +17,8 @@
   "r2_buckets": [
     { "binding": "MEDIA", "bucket_name": "detcord-portal-media" }
   ],
+  // Homepage screenshots for the design review when Google PageSpeed returns none.
+  "browser": { "binding": "BROWSER" },
   "vars": {
     "APP_NAME": "Detcord Digital",
     "EMAIL_ALERT_TO": "dmitriymovsesyan@gmail.com",
@@ -38,6 +40,7 @@
       "r2_buckets": [
         { "binding": "MEDIA", "bucket_name": "detcord-portal-media-staging" }
       ],
+      "browser": { "binding": "BROWSER" },
       "vars": {
         "APP_NAME": "Detcord Digital (staging)",
         "EMAIL_ALERT_TO": "dmitriymovsesyan@gmail.com",
