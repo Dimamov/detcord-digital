@@ -85,7 +85,7 @@ function BusinessView({ id, user, others }) {
               {client.phone && <><dt>Phone</dt><dd>{client.phone}</dd></>}
               {client.city && <><dt>Location</dt><dd>{[client.city, client.state].filter(Boolean).join(', ')}</dd></>}
             </dl>
-            <p class="small faint mt">Something out of date? Tell your Detcord team.</p>
+            <p class="small faint mt">Something out of date? <a href="/business">Update it on your Business page</a>.</p>
           </section>
         ) },
         { id: 'others', title: 'Other businesses', col: 'side', node: others.length > 0 && <section class="card"><h2>Other businesses</h2>{others.map((o) => <div>{o.name}</div>)}</section> },

@@ -27,7 +27,7 @@ function clientFields(body, { partial = false } = {}) {
   return out;
 }
 
-function normalizeUrl(v) {
+export function normalizeUrl(v) {
   const s = String(v ?? '').trim();
   if (!s) return null;
   try {
@@ -138,7 +138,7 @@ r.get('/:id', async (c) => {
   };
   if (staff) {
     const [members, deals, tasks, discoveries, activity, intakes] = await Promise.all([
-      db.prepare(`SELECT u.id, u.name, u.email, u.status, u.last_login_at,
+      db.prepare(`SELECT u.id, u.name, u.email, u.status, u.last_login_at, m.is_owner,
         (SELECT delivery FROM tokens t WHERE t.user_id=u.id AND t.kind='invite' ORDER BY created_at DESC LIMIT 1) AS invite_delivery,
         (SELECT expires_at FROM tokens t WHERE t.user_id=u.id AND t.kind='invite' ORDER BY created_at DESC LIMIT 1) AS invite_expires
         FROM client_members m JOIN users u ON u.id=m.user_id WHERE m.client_id=? ORDER BY u.name`).bind(id).all(),

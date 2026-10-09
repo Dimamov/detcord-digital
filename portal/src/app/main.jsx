@@ -2,7 +2,7 @@ import { render } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
 import './styles.css';
 import { session, refreshSession, route, match, api, navigate } from './lib.js';
-import { Icon, Avatar, Loading, Toasts } from './ui.jsx';
+import { Icon, Avatar, Loading, Toasts, Dialog } from './ui.jsx';
 import { Login, Forgot, SetPassword, Intake } from './pages/auth.jsx';
 import { Dashboard } from './pages/dashboard.jsx';
 import { ClientsList, NewClient, ClientRecord } from './pages/clients.jsx';
@@ -18,6 +18,7 @@ import { GoatPage, GoatRequestPage } from './pages/goat.jsx';
 import { MeetingPage } from './pages/meetings.jsx';
 import { SocialPage, SocialPostPage } from './pages/social.jsx';
 import { ReportsPage, MonthlyReportPage } from './pages/reports.jsx';
+import { BusinessPage } from './pages/business.jsx';
 
 const PUBLIC = [
   ['/login', Login],
@@ -32,6 +33,7 @@ const PRIVATE = [
   ['/clients', ClientsList, ['admin', 'rep']],
   ['/clients/new', NewClient, ['admin', 'rep']],
   ['/clients/:id', ClientRecord, ['admin', 'rep', 'client']],
+  ['/business', BusinessPage, ['client']],
   ['/business/:id', ClientRecord, ['client']],
   ['/pipeline', Pipeline, ['admin', 'rep']],
   ['/tasks', Tasks, ['admin', 'rep']],
@@ -58,7 +60,7 @@ const PRIVATE = [
 const NAV = {
   admin: [['/', 'home', 'Detcord Today'], ['/clients', 'clients', 'Clients'], ['/goat', 'bolt', 'Requests'], ['/pipeline', 'pipeline', 'Pipeline'], ['/tasks', 'tasks', 'Tasks'], ['/invoices', 'card', 'Invoices'], '|Agency', ['/team', 'team', 'Team'], ['/commissions', 'money', 'Commissions'], ['/settings', 'settings', 'Settings']],
   rep: [['/', 'home', 'My Day'], ['/clients', 'clients', 'My clients'], ['/goat', 'bolt', 'Requests'], ['/pipeline', 'pipeline', 'Pipeline'], ['/tasks', 'tasks', 'Tasks'], ['/invoices', 'card', 'Invoices'], ['/commissions', 'money', 'Commissions']],
-  client: [['/', 'home', 'Home'], ['/goat', 'bolt', 'Ask the GOAT'], ['/social', 'globe', 'Social'], ['/reports', 'doc', 'Reports'], ['/invoices', 'card', 'Invoices'], ['/files', 'folder', 'Files']],
+  client: [['/', 'home', 'Home'], ['/business', 'clients', 'Business'], ['/goat', 'bolt', 'Ask the GOAT'], ['/social', 'globe', 'Social'], ['/reports', 'doc', 'Reports'], ['/invoices', 'card', 'Invoices'], ['/files', 'folder', 'Files']],
 };
 
 function ThemeToggle() {
@@ -76,6 +78,32 @@ async function logout() {
   await api('POST', '/auth/logout', {}).catch(() => {});
   session.value = { user: null, clients: [] };
   navigate('/login');
+}
+
+const shortLabel = (l) => l.replace('Detcord ', '').replace('My clients', 'Clients').replace('Ask the GOAT', 'GOAT');
+
+// Phones: up to six links fit. With more, the first five plus a More button that opens the rest in a sheet.
+function BottomNav({ links, current }) {
+  const [more, setMore] = useState(false);
+  const overflow = links.length > 6;
+  const shown = overflow ? links.slice(0, 5) : links;
+  const rest = overflow ? links.slice(5) : [];
+  const restActive = rest.some((i) => current(i[0]));
+  return (
+    <>
+      <nav class="bottom-nav" style={`grid-template-columns:repeat(${shown.length + (overflow ? 1 : 0)},1fr)`}>
+        {shown.map((i) => <a href={i[0]} aria-current={current(i[0])}><Icon name={i[1]} size={20} />{shortLabel(i[2])}</a>)}
+        {overflow && <button type="button" aria-current={restActive ? 'page' : undefined} aria-haspopup="dialog" aria-expanded={more} onClick={() => setMore(true)}><Icon name="menu" size={20} />More</button>}
+      </nav>
+      {more && (
+        <Dialog title="More" onClose={() => setMore(false)}>
+          <nav class="more-nav" onClick={(e) => e.target.closest('a') && setMore(false)}>
+            {rest.map((i) => <a href={i[0]} aria-current={current(i[0])}><Icon name={i[1]} />{i[2]}</a>)}
+          </nav>
+        </Dialog>
+      )}
+    </>
+  );
 }
 
 function Shell({ user, children, path }) {
@@ -107,11 +135,7 @@ function Shell({ user, children, path }) {
           <div class="row"><ThemeToggle /><a class="icon-btn" href="/account" aria-label="Account"><Avatar name={user.name} /></a></div>
         </div>
         {children}
-        {links.length > 1 && (
-          <nav class="bottom-nav" style={`grid-template-columns:repeat(${Math.min(links.length, 6)},1fr)`}>
-            {links.slice(0, 6).map((i) => <a href={i[0]} aria-current={current(i[0])}><Icon name={i[1]} size={20} />{i[2].replace('Detcord ', '').replace('My clients', 'Clients').replace('Ask the GOAT', 'GOAT')}</a>)}
-          </nav>
-        )}
+        {links.length > 1 && <BottomNav links={links} current={current} />}
       </div>
     </div>
   );
