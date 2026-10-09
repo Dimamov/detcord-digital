@@ -4,6 +4,22 @@ import { as } from './helpers.js';
 import { parsePage, checkTarget } from '../src/worker/lib/audit/crawl.js';
 import { designChecks } from '../src/worker/lib/audit/design.js';
 import { runAudit } from '../src/worker/lib/audit/index.js';
+import { launcher } from '../src/worker/lib/audit/screenshots.js';
+
+// A stand-in for Cloudflare's browser: records the pages it was asked to load and returns a tiny JPEG.
+function fakeBrowser() {
+  const visits = [];
+  const browser = {
+    newPage: async () => {
+      const page = { setViewport: async (v) => { page.view = v; }, setUserAgent: async () => {}, goto: async (u) => { visits.push([u, page.view.width]); },
+        screenshot: async () => PIXEL.split(',')[1], close: async () => {} };
+      return page;
+    },
+    close: async () => {},
+  };
+  vi.spyOn(launcher, 'launch').mockResolvedValue(browser);
+  return visits;
+}
 import { sendSms, toE164 } from '../src/worker/lib/sms.js';
 
 const SITE = 'https://www.greatlakesplumbing.com';
@@ -63,7 +79,7 @@ const CRITIQUE = {
 };
 
 // A small fake internet: the customer's site, Google PageSpeed, Google Places, Resend, Twilio and (optionally) Claude.
-function fakeInternet({ siteDown = false, claude = null } = {}) {
+function fakeInternet({ siteDown = false, claude = null, psiLimited = false } = {}) {
   const calls = [];
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init = {}) => {
     const url = String(input?.url || input);
@@ -75,6 +91,7 @@ function fakeInternet({ siteDown = false, claude = null } = {}) {
         content: [{ type: 'text', text: JSON.stringify(CRITIQUE) }] }), { headers: { 'Content-Type': 'application/json' } });
     }
     if (url.startsWith('https://www.googleapis.com/pagespeedonline')) {
+      if (psiLimited) return new Response('{"error":{"code":429}}', { status: 429 });
       const strategy = new URL(url).searchParams.get('strategy');
       return new Response(JSON.stringify(psi(strategy)), { status: 200 });
     }
@@ -296,18 +313,18 @@ describe('website audit', () => {
 });
 
 describe('design review', () => {
-  async function runWithClaude(claude) {
+  async function runWithClaude(claude, opts = {}) {
     const { rep, clientId } = await setup();
-    const all = fakeInternet({ claude });
+    const all = fakeInternet({ claude, ...opts });
     const plain = await (await rep.call('POST', `/api/clients/${clientId}/audits`, {})).json();
     const client = await env.DB.prepare('SELECT * FROM clients WHERE id=?').bind(clientId).first();
     const id = crypto.randomUUID();
     await env.DB.prepare("INSERT INTO audits (id, client_id, url, status, created_by, created_at) VALUES (?,?,?,'running',?,?)").bind(id, clientId, `${SITE}/`, rep.id, Date.now()).run();
     const before = all.length;
-    const out = await runAudit({ ...env, ANTHROPIC_API_KEY: 'test-key' }, { auditId: id, client, url: `${SITE}/` });
+    const out = await runAudit({ ...env, ANTHROPIC_API_KEY: 'test-key', ...opts.env }, { auditId: id, client, url: `${SITE}/` });
     expect(out.ok).toBe(true);
     const a = await (await rep.call('GET', `/api/audits/${id}`)).json();
-    return { rep, plain, a, calls: all.slice(before) };
+    return { rep, clientId, plain, a, calls: all.slice(before) };
   }
 
   it('stores Claude\'s critique of the screenshots without changing any score', async () => {
@@ -343,6 +360,26 @@ describe('design review', () => {
     const r = await (await rep.call('GET', `/api/reports/${a.id}`)).json();
     expect(r.findings.filter((f) => f.source === 'visual').map((f) => f.id)).toEqual(['visual-1', 'visual-3']);
     expect(r.design.visual).toEqual({ status: 'done', impression: CRITIQUE.impression });
+  });
+
+  it('takes its own screenshots when PageSpeed returns none, and leaves design unscored without Google\'s tests', async () => {
+    const visits = fakeBrowser();
+    const { a, calls } = await runWithClaude('ok', { psiLimited: true });
+    expect(visits.slice(-2)).toEqual([[`${SITE}/`, 390], [`${SITE}/`, 1350]]);
+    const sent = JSON.parse(calls.find((cl) => cl.url.includes('api.anthropic.com')).init.body);
+    expect(sent.messages[0].content.filter((b) => b.type === 'image')).toHaveLength(2);
+    expect(a.result.design.visual.status).toBe('done');
+    expect(a.result.shots).toEqual({ mobile: true, desktop: true });
+    expect(a.result.scores.design).toBeNull();
+  });
+
+  it('says why the review was skipped when neither PageSpeed nor our browser gives a screenshot', async () => {
+    const { rep, clientId, a } = await runWithClaude('ok', { psiLimited: true, env: { BROWSER: undefined } });
+    expect(a.result.design.visual).toMatchObject({ status: 'skipped' });
+    expect(a.result.design.visual.reason).toMatch(/PageSpeed returned none and browser rendering is not set up/i);
+    expect(a.result.scores.design).toBeNull();
+    const { audits } = await (await rep.call('GET', `/api/clients/${clientId}/audits`)).json();
+    expect(audits.find((x) => x.id === a.id).design_score).toBeNull();
   });
 
   it('finishes the check with the code-based findings when Claude fails', async () => {

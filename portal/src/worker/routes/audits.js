@@ -45,7 +45,7 @@ function staffView(a, extra = {}) {
 r.get('/clients/:id/audits', async (c) => {
   const { client } = await requireClient(c, c.req.param('id'), { staffOnly: true });
   const rows = (await c.env.DB.prepare(`SELECT a.id, a.url, a.status, a.score, a.error, a.created_at, a.finished_at, u.name AS by_name,
-      a.shared_at, json_extract(a.result, '$.scores.design') AS design_score, json_extract(a.result, '$.design.visual.impression') AS design_impression
+      a.shared_at, CASE WHEN json_extract(a.result, '$.design.lighthouse.mobile') IS NULL AND json_extract(a.result, '$.design.lighthouse.desktop') IS NULL THEN NULL ELSE json_extract(a.result, '$.scores.design') END AS design_score, json_extract(a.result, '$.design.visual.impression') AS design_impression
     FROM audits a LEFT JOIN users u ON u.id=a.created_by WHERE a.client_id=? ORDER BY a.created_at DESC LIMIT 50`).bind(client.id).all()).results;
   const settled = [];
   for (const row of rows) settled.push(await settleStale(c.env.DB, row));

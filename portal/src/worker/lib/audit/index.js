@@ -4,6 +4,7 @@ import { crawl, checkTarget, Budget } from './crawl.js';
 import { pageSpeed, businessProfile } from './google.js';
 import { evaluate, CATEGORIES } from './checks.js';
 import { visualReview, lighthouseDesign } from './design.js';
+import { ownScreenshots } from './screenshots.js';
 import { now } from '../util.js';
 
 export { CATEGORIES, checkTarget };
@@ -22,11 +23,17 @@ export async function runAudit(env, { auditId, client, url }) {
       allowPrivate && env.AUDIT_SKIP_GOOGLE === '1' ? { ok: false, reason: 'Skipped in local development.' } : pageSpeed(env, target.url.href, 'desktop'),
       businessProfile(env, client, target.url.href),
     ]);
-    const visual = await visualReview(env, { client, url: site.home?.url || target.url.href, home: site.home?.parsed, mobile, desktop });
+    // PageSpeed gives no screenshot when it is skipped or over its limit: take our own so the design review still runs.
+    const pageUrl = site.home?.url || target.url.href;
+    const missing = site.reachable ? [['mobile', mobile], ['desktop', desktop]].filter(([, r]) => !r?.ok || !r.screenshot).map(([n]) => n) : [];
+    const own = missing.length && !(allowPrivate && env.AUDIT_SKIP_GOOGLE === '1') ? await ownScreenshots(env, pageUrl, missing) : {};
+    const pic = (name, r) => (r?.ok && r.screenshot ? r : own[name] || r);
+    const shotMobile = pic('mobile', mobile), shotDesktop = pic('desktop', desktop);
+    const visual = await visualReview(env, { client, url: pageUrl, home: site.home?.parsed, mobile: shotMobile, desktop: shotDesktop, shotError: own.error });
     if (!visual.ok && env.ANTHROPIC_API_KEY) console.warn('Design review skipped', auditId, visual.reason);
     const report = evaluate({ client, crawl: site, mobile, desktop, gbp, visual });
     const shots = {};
-    for (const [name, r] of [['mobile', mobile], ['desktop', desktop]]) {
+    for (const [name, r] of [['mobile', shotMobile], ['desktop', shotDesktop]]) {
       const m = r?.ok && /^data:image\/(jpeg|png|webp);base64,(.+)$/.exec(r.screenshot || '');
       if (!m || !env.MEDIA) continue;
       const bytes = Uint8Array.from(atob(m[2]), (ch) => ch.charCodeAt(0));

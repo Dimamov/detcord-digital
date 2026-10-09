@@ -143,11 +143,11 @@ const shot = (r) => {
 };
 
 // Returns { ok: true, impression, findings } or { ok: false, reason }. Never throws.
-export async function visualReview(env, { client, url, home, mobile, desktop }) {
+export async function visualReview(env, { client, url, home, mobile, desktop, shotError }) {
   if (!env.ANTHROPIC_API_KEY) return { ok: false, reason: 'ANTHROPIC_API_KEY is not set.' };
   if (!home) return { ok: false, reason: 'The homepage did not load.' };
   const images = [['phone', shot(mobile)], ['desktop computer', shot(desktop)]].filter(([, img]) => img);
-  if (!images.length) return { ok: false, reason: 'Google PageSpeed returned no screenshots to review.' };
+  if (!images.length) return { ok: false, reason: `No screenshots to review: Google PageSpeed returned none${shotError ? ` and ${shotError.charAt(0).toLowerCase()}${shotError.slice(1)}` : ''}.`.replace('..', '.') };
   const l = home.layout || {};
   const summary = [
     `Business: ${client.name}${client.industry ? ` (${client.industry})` : ''}${client.city ? `, ${client.city}, ${client.state || 'MI'}` : ''}`,

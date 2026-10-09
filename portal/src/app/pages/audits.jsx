@@ -311,6 +311,7 @@ function Report({ r, business, categories, serviceNames = {}, hidden, onToggle, 
   const svc = (s) => (staff ? serviceNames[s] : s);
   const g = r.google;
   const m = r.speed?.mobile;
+  const scores = { ...r.scores, design: designScore(r) };
   return (
     <div class="report">
       <div class="card report-summary">
@@ -319,8 +320,8 @@ function Report({ r, business, categories, serviceNames = {}, hidden, onToggle, 
           <div class="cat-bars">
             {categories.filter((c) => !c.separate || r.scores[c.id] !== undefined).map((c) => (
               <div class={`cat-bar ${c.separate ? 'separate' : ''}`}>
-                <div class="row between small"><span>{c.label}{c.separate && <span class="faint"> · scored separately</span>}</span><strong>{r.scores[c.id] ?? '—'}</strong></div>
-                <div class="bar"><span class={tone(r.scores[c.id])} style={`width:${r.scores[c.id] ?? 0}%`} /></div>
+                <div class="row between small"><span>{c.label}{c.separate && <span class="faint"> · scored separately</span>}</span><strong>{scores[c.id] ?? (c.id === 'design' ? 'Not scored' : '—')}</strong></div>
+                <div class="bar"><span class={tone(scores[c.id])} style={`width:${scores[c.id] ?? 0}%`} /></div>
               </div>
             ))}
           </div>
@@ -418,13 +419,17 @@ function Report({ r, business, categories, serviceNames = {}, hidden, onToggle, 
   );
 }
 
+// The design score needs Google's tests; a score from the page's code alone overstates how good it looks.
+// Older checks stored one anyway, so it is hidden here too.
+const designScore = (r) => (r.design?.lighthouse?.mobile || r.design?.lighthouse?.desktop ? r.scores?.design ?? null : null);
+
 // Design and user experience: both screenshots, Google's accessibility and best-practices scores, the failing design
 // checks from Google's tests, and Claude's first impression when the visual review ran.
 function DesignSection({ r, business, staff, shotBase }) {
   const d = r.design;
   const lh = d.lighthouse || {};
   const ran = d.visual?.status === 'done';
-  const score = r.scores?.design;
+  const score = designScore(r);
   return (
     <div class="card mt report-design">
       <div class="row between" style="align-items:flex-start;gap:12px">
@@ -432,7 +437,7 @@ function DesignSection({ r, business, staff, shotBase }) {
           <h3 style="margin:0">Design and user experience</h3>
           <p class="faint small" style="margin:2px 0 0">How your homepage looks and works for someone deciding whether to contact you. Scored separately; not part of the overall score.</p>
         </div>
-        {score != null && <span class={`score-pill ${tone(score)}`}>{score}</span>}
+        {score != null ? <span class={`score-pill ${tone(score)}`}>{score}</span> : <span class="badge">Not scored</span>}
       </div>
       {(r.shots?.mobile || r.shots?.desktop) && (
         <div class="design-shots mt">
@@ -442,7 +447,7 @@ function DesignSection({ r, business, staff, shotBase }) {
       )}
       {ran && d.visual.impression && <div class="design-impression mt"><strong>First impression</strong><p>{d.visual.impression}</p></div>}
       {!ran && (
-        <div class="alert small mt">The visual design review wasn't run this time, so this section covers what we could check in the page's code and Google's tests.{staff && d.visual?.reason ? ` (${d.visual.reason})` : ''}</div>
+        <div class="alert small mt">The visual design review wasn't run this time, so this section covers what we could check in the page's code{lh.mobile || lh.desktop ? ' and Google\'s tests' : ''}.{score == null ? ' It isn\'t scored, because a score from the code alone would be misleading.' : ''}{staff && d.visual?.reason ? ` (${d.visual.reason})` : ''}</div>
       )}
       {(lh.mobile || lh.desktop) && (
         <div class="grid two mt">
