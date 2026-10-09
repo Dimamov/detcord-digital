@@ -42,9 +42,17 @@ export const REVIEW_TERMS = {
   accessibility: 'Accessibility review and remediation of the pages, templates and components listed below against the agreed WCAG level. Remediation reduces barriers but is not a legal opinion or a guarantee against claims; no blanket compliance certification is promised. Content and third-party tools added later may need new review.',
 };
 
+// Email and SMS marketing, split from 'email-sms' on 2026-10-09 (migration 0016). Kept apart from the pinned
+// version 1 objects above so their text stays byte-identical; no agreement sent before the split names these ids.
+// 'email-sms' keeps its wording so older agreements still render.
+export const V1_ADDED_TERMS = {
+  email: 'Approved email campaigns, sequences, segmentation and templates at the volumes listed below. Client supplies necessary permissions for contact lists. Unsubscribe, suppression and sender identification controls must be configured. Purchased lists and unapproved outreach are excluded.',
+  sms: 'Approved text message campaigns, sequences and keywords at the volumes listed below. Client supplies prior express written consent for marketing texts and keeps the consent records. Opt-out replies, quiet hours and suppression controls must be configured. Purchased lists and unapproved outreach are excluded. Carrier registration and messaging fees are separate unless expressly included.',
+};
+
 export const termsFor = (serviceId, version = TERMS_V1) => (version === TERMS_2026_10
   ? SERVICE_TERMS_2026_10[serviceId] || SERVICE_TERMS[serviceId] || REVIEW_TERMS_2026_10[serviceId] || REVIEW_TERMS[serviceId]
-  : SERVICE_TERMS[serviceId] || REVIEW_TERMS[serviceId]) || null;
+  : SERVICE_TERMS[serviceId] || REVIEW_TERMS[serviceId] || V1_ADDED_TERMS[serviceId]) || null;
 export const needsReview = (serviceId) => !SERVICE_TERMS[serviceId];
 
 export const GENERAL_TERMS = [
@@ -118,6 +126,8 @@ export const SERVICE_TERMS_2026_10 = {
   web: 'Responsive website with the pages, forms, CMS, integrations, revision rounds and launch milestones listed below, plus any agreed funnel analysis and conversion tests. Domains should be registered in Client’s name. Additional pages, redesigns and new features require an approved change order. Experiments depend on sufficient traffic and reliable tracking; conversion increases are not guaranteed. Accessibility work is included only where the scope names it and is handled under “Accessibility”.',
   content: 'Articles, guides, case studies, landing pages and static assets in the quantities, formats and revision rounds listed below. AI-assisted drafts are reviewed by a person before delivery, as described under “AI tools and generated content”. Client verifies claims, permissions and testimonials before publication. Video production and animation are excluded.',
   automation: 'Agreed workflows, knowledge sources, escalation rules, integrations, testing and documentation. AI output can be incorrect and is handled under “AI tools and generated content”. Customer-facing assistants say they are automated when asked and wherever the law requires. Sensitive decisions, commitments and exceptional actions follow Client-approved human-review rules. API and usage costs are separate.',
+  email: 'Approved email campaigns, sequences, segmentation and templates at the volumes listed below, sent under “Email, text message and phone marketing”. Client supplies contact lists with the permissions the law requires and keeps the consent records. Unsubscribe and suppression controls, sender identification and Client’s postal address are set up before the first send. Purchased, rented or scraped lists and unapproved outreach are excluded.',
+  sms: 'Approved text message campaigns, sequences and keywords at the volumes listed below, sent under “Email, text message and phone marketing”. Client supplies prior express written consent for every marketing text and keeps the consent records. Opt-out replies such as STOP, quiet hours and suppression controls are set up before the first send. Purchased, rented or scraped lists and unapproved outreach are excluded. Carrier registration (such as 10DLC) and messaging fees are separate unless expressly included.',
   'email-sms': 'Approved campaigns, sequences, segmentation and templates at the volumes listed below, sent under “Email, text message and phone marketing”. Client supplies contact lists with the permissions the law requires and keeps the consent records. Opt-out and suppression controls are configured before the first send. Purchased, rented or scraped lists and unapproved outreach are excluded.',
   reputation: 'Review requests, monitoring and responses at the agreed cadence, with escalation of disputed or sensitive reviews. Neither party will write, buy or reward fake reviews or reviews conditioned on a positive rating, post undisclosed reviews by owners or staff, or selectively prevent dissatisfied customers from accessing public review opportunities. Review responses do not reveal customers’ private information.',
 };

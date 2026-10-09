@@ -58,6 +58,10 @@ describe('version 2026-10 terms', () => {
     expect(html).toContain('No minimum term or early termination fee applies.');
     expect(termsFor('email-sms', TERMS_2026_10)).toContain('Email, text message and phone marketing');
     expect(termsFor('email-sms')).toBe(SERVICE_TERMS['email-sms']);
+    // Email and SMS marketing (split from email-sms) have wording in both versions.
+    expect(termsFor('sms', TERMS_2026_10)).toContain('prior express written consent for every marketing text');
+    expect(termsFor('email', TERMS_2026_10)).toContain('postal address');
+    expect(termsFor('sms')).toContain('prior express written consent');
   });
 
   it('show the chosen early termination wording only for fixed terms', () => {
