@@ -253,7 +253,7 @@ function Overview({ data, user, reload }) {
       </div>
       <div class="stack">
         <section class="card">
-          <div class="card-head"><h2>Business</h2><button class="btn sm ghost" onClick={() => setEditing(true)}>Edit</button></div>
+          <div class="card-head"><h2>Business</h2><div class="row">{user.role === 'admin' && <button class="btn sm ghost" onClick={() => setEditing('delete')}><Icon name="trash" />Delete</button>}<button class="btn sm ghost" onClick={() => setEditing(true)}>Edit</button></div></div>
           <dl class="kv">
             <dt>Phone</dt><dd>{c.phone ? <a href={`tel:${c.phone}`}>{c.phone}</a> : <span class="faint">—</span>}</dd>
             <dt>Website</dt><dd>{c.website ? <a href={c.website} target="_blank" rel="noopener">{c.website.replace(/^https?:\/\//, '')}</a> : <span class="faint">—</span>}</dd>
@@ -267,12 +267,12 @@ function Overview({ data, user, reload }) {
         <ContactsCard data={data} reload={reload} />
         <TeamCard data={data} user={user} reload={reload} />
       </div>
-      {editing && <EditClient client={c} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); reload(); }} isAdmin={user.role === 'admin'} />}
+      {editing && <EditClient client={c} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); reload(); }} isAdmin={user.role === 'admin'} startDelete={editing === 'delete'} />}
     </div>
   );
 }
 
-function EditClient({ client, onClose, onSaved, isAdmin }) {
+function EditClient({ client, onClose, onSaved, isAdmin, startDelete }) {
   const [f, setF] = useState({ ...client });
   const [confirmDelete, setConfirmDelete] = useState('');
   const { busy, error, run } = useAction();
@@ -306,9 +306,9 @@ function EditClient({ client, onClose, onSaved, isAdmin }) {
       </div>
       {error && <div class="alert bad mt">{error}</div>}
       {isAdmin && (
-        <details class="mt">
+        <details class="mt" open={startDelete}>
           <summary class="small muted" style="cursor:pointer">Delete this client</summary>
-          <div class="alert bad mt">Deleting removes this business and everything linked to it (contacts, deals, tasks, notes, discovery). Portal logins stay but lose access. This can’t be undone.</div>
+          <div class="alert bad mt">Deleting removes this business and everything linked to it: contacts, deals, discovery, notes, tasks, files, meetings, website checks, unsigned agreements and unpaid invoices. Portal logins that only belonged to this business are removed too. A client with a signed agreement or a payment can’t be deleted; set it to Former instead. This can’t be undone.</div>
           <Field label={`Type “${client.name}” to confirm`}><input class="input" value={confirmDelete} onInput={(e) => setConfirmDelete(e.target.value)} /></Field>
           <button class="btn danger mt" disabled={confirmDelete !== client.name || busy} onClick={del}><Icon name="trash" />Delete permanently</button>
         </details>
@@ -677,7 +677,8 @@ function AccessTab({ data, user, reload }) {
 }
 
 export function InviteResult({ result }) {
-  if (result.delivery === 'sent') return <div class="alert good mt">Invitation emailed. The link works once and expires in 24 hours.</div>;
+  if (result.existing && !result.delivery) return <div class="alert good mt">They already had a portal login, so it now opens this business too. They sign in with their usual password.</div>;
+  if (result.delivery === 'sent') return <div class="alert good mt">{result.resent ? 'They already had a login that was never set up, so a new setup link was emailed. ' : 'Invitation emailed. '}The link works once and expires in 24 hours. Ask them to check spam if it doesn’t arrive.</div>;
   return (
     <div class="alert warn mt">
       <strong>The email didn’t go out.</strong> {result.error}
