@@ -6,6 +6,7 @@ import { runAudit, checkTarget, CATEGORIES } from '../lib/audit/index.js';
 import { sendEmail, renderEmail } from '../lib/email.js';
 import { sendSms, toE164, twilioConfig, testTwilio } from '../lib/sms.js';
 import { pageSpeed } from '../lib/audit/google.js';
+import { reportPdf, pdfFileName } from '../lib/audit/pdf.js';
 import { getSettings, putSetting } from '../lib/settings.js';
 import { serviceById } from '../../shared/services.js';
 
@@ -229,13 +230,13 @@ r.get('/reports', async (c) => {
   return c.json({ reports: rows });
 });
 
-r.get('/reports/:id', async (c) => {
-  const { user, client, a } = await loadReport(c);
+// What the customer's report shows, used by the portal page and the PDF.
+async function reportView(c, user, client, a) {
   const company = await getSettings(c.env.DB, 'company.');
   const res = JSON.parse(a.result);
   const hidden = new Set(JSON.parse(a.hidden || '[]'));
   const findings = res.findings.filter((f) => !hidden.has(f.id)).map(({ id, cat, severity, title, detail, why, fix, service, source, view }) => ({ id, cat, severity, title, detail, why, fix, service: serviceName[service] || null, source: source || null, view: view || null }));
-  return c.json({
+  return {
     id: a.id,
     preview: isStaff(user),
     clientId: client.id,
@@ -258,8 +259,42 @@ r.get('/reports/:id', async (c) => {
     note: a.note,
     shots: res.shots || {},
     contact: { email: company.email || 'info@detcorddigital.com', phone: company.phone || null },
-  });
+  };
+}
+
+r.get('/reports/:id', async (c) => {
+  const { user, client, a } = await loadReport(c);
+  return c.json(await reportView(c, user, client, a));
 });
+
+// The report as a PDF built on the server, so it prints cleanly from any device (no buttons, no browser stamps).
+r.get('/reports/:id/pdf', async (c) => {
+  const { user, client, a } = await loadReport(c);
+  if (!c.env.BROWSER) fail(503, 'PDF download is not set up.');
+  const v = await reportView(c, user, client, a);
+  const dataUri = async (obj, type) => obj && `data:${obj.httpMetadata?.contentType || type};base64,${toBase64(await obj.arrayBuffer())}`;
+  const shots = {};
+  for (const name of ['mobile', 'desktop']) if (v.shots?.[name] && c.env.MEDIA) shots[name] = await dataUri(await c.env.MEDIA.get(`audits/${a.id}/${name}`), 'image/jpeg');
+  let logo = null;
+  try {
+    const res = await c.env.ASSETS?.fetch(new URL('/detcord-logo-transparent.webp', c.req.url));
+    if (res?.ok) logo = `data:image/webp;base64,${toBase64(await res.arrayBuffer())}`;
+  } catch {}
+  let pdf;
+  try { pdf = await reportPdf(c.env, v, { shots, logo }); } catch { fail(502, 'The PDF couldn\'t be made right now. Try again in a minute.'); }
+  return new Response(pdf, { headers: {
+    'Content-Type': 'application/pdf',
+    'Content-Disposition': `attachment; filename="${pdfFileName(v).replace(/[^\x20-\x7e]|"/g, '')}"; filename*=UTF-8''${encodeURIComponent(pdfFileName(v))}`,
+    'Cache-Control': 'private, no-store',
+  } });
+});
+
+function toBase64(buf) {
+  const bytes = new Uint8Array(buf);
+  let s = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(s);
+}
 
 r.get('/reports/:id/shot/:name', async (c) => {
   const { a } = await loadReport(c);
