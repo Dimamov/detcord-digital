@@ -264,23 +264,48 @@ export function ReportPage({ id, user }) {
           <h1>{d.business}</h1>
           <p class="sub">{d.url.replace(/^https?:\/\//, '').replace(/\/$/, '')} · checked {date(d.checkedAt)}</p>
         </div>
-        <button class="btn secondary no-print" onClick={() => print()}><Icon name="download" />Save as PDF</button>
+        <PdfButton id={d.id} business={d.business} />
       </div>
       {d.note && <div class="report-note">{d.note}</div>}
       <Report r={d} business={d.business} categories={d.categories} shotBase={`/api/reports/${d.id}/shot`} />
       <div class="report-cta">
         <h2>Want these fixed?</h2>
         <p>Detcord Digital fixes everything in this report and keeps it fixed, so more of the people searching for you become calls.</p>
-        <div class="row wrap" style="justify-content:center">
+        <div class="row wrap no-print" style="justify-content:center">
           <a class="btn" href={mailto}><Icon name="bolt" />LIGHT THE FUSE</a>
           {d.contact.phone && <a class="btn secondary" href={`tel:${d.contact.phone}`}><Icon name="phone" />{d.contact.phone}</a>}
         </div>
-        <p class="faint small">{d.contact.email}</p>
+        <p class="faint small no-print">{d.contact.email}</p>
+        <p class="print-only"><strong>{[d.contact.phone, d.contact.email].filter(Boolean).join('  ·  ')}</strong></p>
       </div>
       {!d.preview && <p class="center no-print"><a class="btn secondary" href={`/questionnaire/${d.clientId}`}><Icon name="doc" />Answer your business questionnaire</a></p>}
       <p class="faint small center">Results reflect the website and Google listing on {date(d.checkedAt)}.</p>
     </div>
   );
+}
+
+// Downloads the server-built PDF. If it can't be made (no browser rendering set up), falls back to the print dialog.
+function PdfButton({ id, business }) {
+  const [busy, setBusy] = useState(false);
+  const save = async () => {
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/reports/${id}/pdf`, { credentials: 'same-origin' });
+      if (!res.ok) throw new Error();
+      const url = URL.createObjectURL(await res.blob());
+      const name = /filename\*=UTF-8''([^;]+)/.exec(res.headers.get('Content-Disposition') || '')?.[1];
+      const link = Object.assign(document.createElement('a'), { href: url, download: name ? decodeURIComponent(name) : `${business} - Website check.pdf` });
+      document.body.append(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch {
+      print();
+    } finally {
+      setBusy(false);
+    }
+  };
+  return <button class="btn secondary no-print" onClick={save} disabled={busy}>{busy ? <><Spinner />Making PDF…</> : <><Icon name="download" />Save as PDF</>}</button>;
 }
 
 // Client home card: every check Detcord has shared with this business.
@@ -318,7 +343,7 @@ function Report({ r, business, categories, serviceNames = {}, hidden, onToggle, 
         <ScoreRing score={r.overall} grade={r.grade} />
         <div style="flex:1;min-width:220px">
           <div class="cat-bars">
-            {categories.filter((c) => !c.separate || r.scores[c.id] !== undefined).map((c) => (
+            {categories.filter((c) => !c.separate || scores[c.id] != null).map((c) => (
               <div class={`cat-bar ${c.separate ? 'separate' : ''}`}>
                 <div class="row between small"><span>{c.label}{c.separate && <span class="faint"> · scored separately</span>}</span><strong>{scores[c.id] ?? (c.id === 'design' ? 'Not scored' : '—')}</strong></div>
                 <div class="bar"><span class={tone(scores[c.id])} style={`width:${scores[c.id] ?? 0}%`} /></div>
@@ -441,8 +466,8 @@ function DesignSection({ r, business, staff, shotBase }) {
       </div>
       {(r.shots?.mobile || r.shots?.desktop) && (
         <div class="design-shots mt">
-          {r.shots?.mobile && <figure><img class="phone-shot" src={`${shotBase}/mobile`} alt={`${business} homepage on a phone`} loading="lazy" /><figcaption class="faint small">Phone</figcaption></figure>}
-          {r.shots?.desktop && <figure class="grow"><img class="desktop-shot" src={`${shotBase}/desktop`} alt={`${business} homepage on a computer`} loading="lazy" /><figcaption class="faint small">Computer</figcaption></figure>}
+          {r.shots?.mobile && <figure><img class="phone-shot" src={`${shotBase}/mobile`} alt={`${business} homepage on a phone`} /><figcaption class="faint small">Phone</figcaption></figure>}
+          {r.shots?.desktop && <figure class="grow"><img class="desktop-shot" src={`${shotBase}/desktop`} alt={`${business} homepage on a computer`} /><figcaption class="faint small">Computer</figcaption></figure>}
         </div>
       )}
       {ran && d.visual.impression && <div class="design-impression mt"><strong>First impression</strong><p>{d.visual.impression}</p></div>}

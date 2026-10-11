@@ -196,6 +196,27 @@ describe('website audit', () => {
     expect((await otherRep.call('DELETE', `/api/audits/${a.id}`)).status).toBe(404);
   });
 
+  it('builds the report as a print-ready PDF', async () => {
+    const { rep, otherRep, clientId } = await setup();
+    fakeInternet();
+    const a = await (await rep.call('POST', `/api/clients/${clientId}/audits`, {})).json();
+    let html;
+    vi.spyOn(launcher, 'launch').mockResolvedValue({
+      newPage: async () => ({ setContent: async (h) => { html = h; }, pdf: async () => new TextEncoder().encode('%PDF-1.7 test') }),
+      close: async () => {},
+    });
+    const res = await rep.call('GET', `/api/reports/${a.id}/pdf`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Type')).toBe('application/pdf');
+    expect(res.headers.get('Content-Disposition')).toMatch(/^attachment; filename=".+ - Website check - \d{4}-\d{2}-\d{2}\.pdf"/);
+    expect(await res.text()).toBe('%PDF-1.7 test');
+    // A document, not a web page: no buttons or links, and the findings and contact details are all there.
+    expect(html).not.toMatch(/<button|<a\s/);
+    expect(html).toContain('Want these fixed?');
+    expect(html).toContain(a.result.findings[0].title.replace(/'/g, '&#39;').replace(/"/g, '&quot;'));
+    expect((await otherRep.call('GET', `/api/reports/${a.id}/pdf`)).status).toBe(404);
+  });
+
   it('refuses private and malformed addresses', async () => {
     const { rep, clientId } = await setup();
     for (const url of ['http://localhost:8787', 'http://192.168.1.10', 'http://10.0.0.5/admin', 'ftp://example.com', 'http://intranet']) {
